@@ -1,0 +1,38 @@
+[package]
+name = "nuitrack-rs"
+version = "0.0.1"
+edition = "2024"
+
+[workspace]
+resolver = "2" # Recommended for new workspaces, uses the newer feature resolver.
+members = [
+    ".",  # Represents the main nuitrack-rs library package itself (in the current directory).
+    "examples/tokio-runtime-feature/basic", # Path to your example package.
+    "validation_apps/test-concurrent-init"
+]
+
+[lib]
+name = "nuitrack_rs"
+
+[dependencies]
+cxx = "1.0"
+thiserror = "2.0"
+futures-core = "0.3"
+futures-channel = "0.3"
+pin-project-lite = "0.2"
+tracing = "0.1"
+blocking = "1"
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
+tokio-util = { version = "0.7", optional = true }
+
+[build-dependencies]
+cxx-build = "1.0"
+toml = "0.8"
+anyhow = "1.0"
+
+[features]
+default = []
+tokio_runtime = ["tokio", "tokio-util"]
+
+[package.metadata.nuitrack]
+sdk_version_tag = "v0.38.2"
