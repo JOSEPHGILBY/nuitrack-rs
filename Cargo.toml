@@ -24,7 +24,7 @@ include = [
 ]
 
 exclude = [
-    "/vendor"
+    "vendor/"
 ]
 
 
