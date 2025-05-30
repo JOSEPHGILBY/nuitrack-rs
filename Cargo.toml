@@ -13,20 +13,19 @@ keywords = ["nuitrack", "sdk", "bindings", "skeletal-tracking", "gesture-recogni
 categories = ["api-bindings", "asynchronous", "computer-vision", "multimedia", "science::robotics" ]
 links = "nuitrack"
 
-include = [
-    "src/**/*.rs",       # All your Rust source files
-    "src/**/*.cc",       # All your C++ implementation files for the bridge
-    "include/**/*.h",    # All your C++ header files for the bridge
-    "build.rs",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE",           # Ensure this filename matches your actual license file
-]
+# include = [
+#     "/src/**/*.rs",       # All your Rust source files
+#     "/src/**/*.cc",       # All your C++ implementation files for the bridge
+#     "/include/**/*.h",    # All your C++ header files for the bridge
+#     "/build.rs",
+#     "/Cargo.toml",
+#     "/README.md",
+#     "/LICENSE",           # Ensure this filename matches your actual license file
+# ]
 
-exclude = [
-    "vendor/"
-]
-
+# exclude = [
+#     "/vendor"
+# ]
 
 [workspace]
 members = [

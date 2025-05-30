@@ -14,7 +14,11 @@ fn main() -> Result<()> {
 
     let manifest_dir = PathBuf::from(manifest_dir_string);
 
-    let sdk_dest_path = manifest_dir.join(NUITRACK_SDK_VENDOR_SUBDIR);
+    let out_dir_string = env::var("OUT_DIR")
+        .context("Failed to get OUT_DIR environment variable")?;
+    let out_dir = PathBuf::from(out_dir_string);
+    
+    let sdk_dest_path = out_dir.join(NUITRACK_SDK_VENDOR_SUBDIR);
 
     let version_specifier = get_desired_tag(&manifest_dir)?;
     println!("cargo:warning=Desired Nuitrack SDK tag: {}", version_specifier);
