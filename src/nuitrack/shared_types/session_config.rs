@@ -2,6 +2,8 @@
 
 use cxx::SharedPtr;
 use std::path::Path;
+use crate::nuitrack_bridge::device::ffi::Device as FFIDevice;
+
 use super::error::NuitrackError; // Assuming error module is at super::error
 
 // --- For Device Discovery ---
@@ -13,7 +15,7 @@ pub struct DiscoveredDeviceInfo {
     pub original_index: usize,
     // Keep the FFI Ptr to allow selection based on this discovered object later
     // This means FfiDevice needs to be Send+Sync for SharedPtr to be Send+Sync for Vec to be Send
-    pub(crate) ffi_device_ptr: SharedPtr<crate::nuitrack_bridge::device::ffi::Device>,
+    pub(crate) ffi_device_ptr: SharedPtr<FFIDevice>,
 }
 
 // --- For Builder Configuration ---

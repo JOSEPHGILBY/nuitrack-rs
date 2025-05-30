@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2024"
 
 [workspace]
-resolver = "2" # Recommended for new workspaces, uses the newer feature resolver.
 members = [
     ".",  # Represents the main nuitrack-rs library package itself (in the current directory).
     "examples/tokio-runtime-feature/basic", # Path to your example package.
@@ -35,4 +34,4 @@ default = []
 tokio_runtime = ["tokio", "tokio-util"]
 
 [package.metadata.nuitrack]
-sdk_version_tag = "v0.38.2"
+sdk_version_tag = "v0.38"

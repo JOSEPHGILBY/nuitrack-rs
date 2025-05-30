@@ -16,29 +16,145 @@ fn main() -> Result<()> {
 
     let sdk_dest_path = manifest_dir.join(NUITRACK_SDK_VENDOR_SUBDIR);
 
-    let desired_tag = get_desired_tag(&manifest_dir)?;
-    println!("cargo:warning=Desired Nuitrack SDK tag: {}", desired_tag);
+    let version_specifier = get_desired_tag(&manifest_dir)?;
+    println!("cargo:warning=Desired Nuitrack SDK tag: {}", version_specifier);
 
-    if check_existing_sdk(&sdk_dest_path, &desired_tag) {
+    // ** NEW: Resolve the specific tag **
+    let resolved_tag = resolve_actual_tag(NUITRACK_REPO_URL, &version_specifier)?;
+    println!(
+        "cargo:warning=Resolved Nuitrack SDK tag for operations: {}",
+        resolved_tag
+    );
+
+    if check_existing_sdk(&sdk_dest_path, &resolved_tag) {
         println!(
             "cargo:warning=Nuitrack SDK version {} already vendored at {:?}. Skipping clone.",
-            desired_tag, sdk_dest_path
+            version_specifier, sdk_dest_path
         );
     } else {
         println!(
             "cargo:warning=Vendoring Nuitrack SDK tag {} into {:?}...",
-            desired_tag, sdk_dest_path
+            resolved_tag, sdk_dest_path
         );
-        setup_sdk_repo_with_git_command(&sdk_dest_path, &desired_tag)?;
+        setup_sdk_repo_with_git_command(&sdk_dest_path, &resolved_tag)?;
         println!(
             "cargo:warning=Successfully cloned Nuitrack SDK tag {}.",
-            desired_tag
+            resolved_tag
         );
     }
     configure_native_build(&manifest_dir, &sdk_dest_path)?;  
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     Ok(())
+}
+
+fn resolve_actual_tag(repo_url: &str, version_specifier: &str) -> Result<String> {
+    // Check if version_specifier is already a full version (e.g., vX.Y.Z or X.Y.Z)
+    let specifier_parts: Vec<&str> = version_specifier
+        .strip_prefix('v')
+        .unwrap_or(version_specifier)
+        .split('.')
+        .collect();
+
+    if specifier_parts.len() == 3 && specifier_parts.iter().all(|p| p.parse::<u32>().is_ok()) {
+        // Looks like a full version (e.g., v0.38.2 or 0.38.2 was specified).
+        // We'll use this tag directly. Git clone will fail if it doesn't exist.
+        // Ensure it starts with 'v' if the original specifier didn't but parts suggest a full version.
+        let tag_to_use = if !version_specifier.starts_with('v') && version_specifier.matches('.').count() == 2 {
+            format!("v{}", version_specifier)
+        } else {
+            version_specifier.to_string()
+        };
+        println!(
+            "cargo:warning=Using specific tag from Cargo.toml: {}",
+            tag_to_use
+        );
+        return Ok(tag_to_use);
+    }
+
+    // Assumed to be a partial version like "v0.38" or "0.38"
+    // Normalize: ensure it starts with 'v' for consistency with Nuitrack tags.
+    let mut base_prefix = version_specifier.to_string();
+    if !version_specifier.starts_with('v') && specifier_parts.len() == 2 { // e.g. "0.38"
+        base_prefix = format!("v{}", version_specifier); // "v0.38"
+    }
+
+    // Validate that the base_prefix is now in vX.Y format
+    let base_prefix_parts: Vec<&str> = base_prefix.split('.').collect();
+    if !(base_prefix.starts_with('v') && base_prefix_parts.len() == 2 && base_prefix_parts[0].len() > 1) {
+         bail!(
+            "Version specifier '{}' (normalized to '{}') is not in 'vX.Y' format for dynamic resolution or a full 'vX.Y.Z' tag. Nuitrack tags typically start with 'v' (e.g., v0.38).",
+            version_specifier, base_prefix
+        );
+    }
+    // Now base_prefix is like "v0.38"
+
+    let glob_pattern = format!("refs/tags/{}*", base_prefix); // e.g., refs/tags/v0.38*
+
+    println!(
+        "cargo:warning=Attempting to resolve latest tag for prefix: {} using pattern: {}",
+        base_prefix, glob_pattern
+    );
+
+    let output = Command::new("git")
+        .args(["ls-remote", "--tags", "--refs", repo_url, &glob_pattern])
+        .output()
+        .context(format!("Failed to execute git ls-remote for {}", repo_url))?;
+
+    if !output.status.success() {
+        bail!(
+            "git ls-remote command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let output_str =
+        String::from_utf8(output.stdout).context("git ls-remote output was not valid UTF-8")?;
+
+    let mut found_tags: Vec<String> = Vec::new();
+    let expected_tag_start = format!("{}.", base_prefix); // e.g., "v0.38."
+
+    for line in output_str.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 2 && parts[1].starts_with("refs/tags/") {
+            let tag_name = parts[1].trim_start_matches("refs/tags/");
+            // Ensure it strictly matches prefix + ".<number>" e.g. v0.38.0, v0.38.1 etc.
+            if tag_name.starts_with(&expected_tag_start) {
+                // Further check: ensure the part after "vX.Y." is numeric (patch version)
+                let patch_part = tag_name.trim_start_matches(&expected_tag_start);
+                if patch_part.parse::<u32>().is_ok() {
+                    found_tags.push(tag_name.to_string());
+                }
+            }
+        }
+    }
+
+    if found_tags.is_empty() {
+        bail!(
+            "No tags found matching the pattern '{}.Z' (e.g., '{}.0') in {}",
+            base_prefix, base_prefix, repo_url
+        );
+    }
+
+    found_tags.sort_by(|a, b| {
+        let a_patch_str = a.trim_start_matches(&expected_tag_start);
+        let b_patch_str = b.trim_start_matches(&expected_tag_start);
+        let a_patch = a_patch_str.parse::<u32>().unwrap_or(0); // Default to 0 on parse error
+        let b_patch = b_patch_str.parse::<u32>().unwrap_or(0);
+        a_patch.cmp(&b_patch) // Sorts numerically in ascending order
+    });
+
+    let best_tag = found_tags.last().cloned().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Failed to determine latest tag from candidates for prefix '{}'",
+            base_prefix
+        )
+    })?;
+    println!(
+        "cargo:warning=Resolved tag for specifier '{}' to: {}",
+        version_specifier, best_tag
+    );
+    Ok(best_tag)
 }
 
 fn get_desired_tag(crate_root_dir: &Path) -> Result<String> {
@@ -164,6 +280,76 @@ fn setup_sdk_repo_with_git_command(sdk_dest_path: &Path, desired_tag: &str) -> R
     Ok(())
 }
 
+fn scan_for_modules_recursive(
+    dir_to_scan: &Path,                // Current directory being scanned (e.g., .../include/nuitrack_bridge/types)
+    base_include_dir: &Path,           // The top-level include dir (e.g., .../include/nuitrack_bridge)
+    base_src_dir: &Path,               // The top-level src dir (e.g., .../src/nuitrack_bridge)
+    rs_bridge_files: &mut Vec<PathBuf>,// Collector for .rs files
+    cc_impl_files: &mut Vec<PathBuf>,  // Collector for .cc files
+) -> Result<()> {
+    for entry_result in fs::read_dir(dir_to_scan)
+        .with_context(|| format!("Failed to read directory: {}", dir_to_scan.display()))? {
+        let entry = entry_result
+            .with_context(|| format!("Failed to read directory entry in: {}", dir_to_scan.display()))?;
+        let current_path = entry.path();
+
+        if current_path.is_dir() {
+            scan_for_modules_recursive(
+                &current_path,
+                base_include_dir,
+                base_src_dir,
+                rs_bridge_files,
+                cc_impl_files,
+            )?;
+            continue;
+        } 
+        if !current_path.is_file() { continue; }
+
+            // Check if it's a header file
+        if !(current_path.extension().and_then(std::ffi::OsStr::to_str) == Some("h")) { continue; }
+
+        let h_file_path = current_path;
+
+        // Get path relative to the base_include_dir (e.g., "core.h" or "types/skeleton.h")
+        let relative_h_path = h_file_path.strip_prefix(base_include_dir)
+            .with_context(|| format!("Failed to strip prefix from header path: {} relative to {}", h_file_path.display(), base_include_dir.display()))?;
+        
+        // Get the same relative structure but without the .h extension (e.g., "core" or "types/skeleton")
+        let relative_stem_path = relative_h_path.with_extension(""); // Becomes "core" or "types/skeleton"
+        
+        let rs_file = base_src_dir.join(&relative_stem_path).with_extension("rs");
+        let cc_file = base_src_dir.join(&relative_stem_path).with_extension("cc");
+
+        if !(rs_file.is_file() && cc_file.is_file()) {
+            if !rs_file.is_file() {
+                println!(
+                    "cargo:warning=Skipping header {} because corresponding Rust bridge file {} was not found",
+                    h_file_path.display(), rs_file.display()
+                );
+            }
+            if !cc_file.is_file() {
+                println!(
+                    "cargo:warning=Skipping header {} because corresponding C++ implementation {} was not found",
+                    h_file_path.display(), cc_file.display()
+                );
+            }
+            continue;
+        } 
+
+        println!(
+            "cargo:warning=Found FFI module: .h: {}, .rs: {}, .cc: {}",
+            h_file_path.display(), rs_file.display(), cc_file.display()
+        );
+        rs_bridge_files.push(rs_file.clone());
+        cc_impl_files.push(cc_file.clone());
+
+        println!("cargo:rerun-if-changed={}", h_file_path.display());
+        println!("cargo:rerun-if-changed={}", rs_file.display());
+        println!("cargo:rerun-if-changed={}", cc_file.display());
+    }
+    Ok(())
+}
+
 fn configure_native_build(
     crate_root_dir: &Path, // This is manifest_dir (e.g., .../nuitrack_rs)
     nuitrack_sdk_vendored_path: &Path, // This is .../nuitrack_rs/vendor/nuitrack-sdk
@@ -197,58 +383,29 @@ fn configure_native_build(
         bail!("Vendored Nuitrack SDK missing platform library dir ('{}') at: {:?}", platform_lib_dir_name, nuitrack_sdk_lib_dir);
     }
 
-    let project_bridge_h_dir = crate_root_dir.join("include").join("nuitrack_bridge");
-    let project_bridge_rs_cc_dir = crate_root_dir.join("src").join("nuitrack_bridge");
+    let project_bridge_h_base_dir = crate_root_dir.join("include").join("nuitrack_bridge");
+    let project_bridge_src_base_dir = crate_root_dir.join("src").join("nuitrack_bridge");
     
-    if !project_bridge_h_dir.is_dir() {
-        bail!("Bridge modules include directory not found at: {:?}", project_bridge_h_dir);
+    if !project_bridge_h_base_dir.is_dir() {
+        bail!("Bridge modules include directory not found at: {:?}", project_bridge_h_base_dir);
     }
-    if !project_bridge_rs_cc_dir.is_dir() {
-        bail!("Bridge modules source directory not found at: {:?}", project_bridge_rs_cc_dir);
+    if !project_bridge_src_base_dir.is_dir() {
+        bail!("Bridge modules source directory not found at: {:?}", project_bridge_src_base_dir);
     }
 
     let mut rs_bridge_files = Vec::new();
     let mut cc_impl_files = Vec::new();
 
-    println!("cargo:warning=Scanning for FFI headers in {:?} to find modules...", project_bridge_h_dir);
-    for entry_result in fs::read_dir(&project_bridge_h_dir)? {
-        let entry = entry_result?;
-        let h_file_path = entry.path(); // This is the .h file path
-
-        if !h_file_path.is_file() { continue; }
-
-        let Some(extension) = h_file_path.extension() else { continue; };
-        if extension != "h" { continue; } // Only process .h files
-
-        let Some(stem) = h_file_path.file_stem().and_then(|s| s.to_str()) else {
-            println!("cargo:warning=Skipping header file with non-UTF8 stem: {:?}", h_file_path.display());
-            continue;
-        };
-
-        let rs_file = project_bridge_rs_cc_dir.join(format!("{}.rs", stem));
-        let cc_file = project_bridge_rs_cc_dir.join(format!("{}.cc", stem));
-
-        if rs_file.is_file() && cc_file.is_file() {
-            println!("cargo:warning=Found FFI module corresponding to header: {}.h (stem: {})", stem, stem);
-            rs_bridge_files.push(rs_file.clone());
-            cc_impl_files.push(cc_file.clone());
-
-            println!("cargo:rerun-if-changed={}", h_file_path.display());
-            println!("cargo:rerun-if-changed={}", rs_file.display());
-            println!("cargo:rerun-if-changed={}", cc_file.display());
-        } else {
-            if !rs_file.is_file() {
-                println!("cargo:warning=Skipping header {} because corresponding Rust bridge file {}.rs was not found in {:?}",
-                         h_file_path.display(), stem, project_bridge_rs_cc_dir);
-            }
-            if !cc_file.is_file() {
-                println!("cargo:warning=Skipping header {} because corresponding C++ implementation {}.cc was not found in {:?}",
-                         h_file_path.display(), stem, project_bridge_rs_cc_dir);
-            }
-        }
-    }
+    println!("cargo:warning=Scanning for FFI headers in {:?} to find modules...", project_bridge_h_base_dir);
+    scan_for_modules_recursive(
+        &project_bridge_h_base_dir,    // dir_to_scan (starts at base)
+        &project_bridge_h_base_dir,    // base_include_dir (for stripping prefix)
+        &project_bridge_src_base_dir,  // base_src_dir (for joining relative paths)
+        &mut rs_bridge_files,
+        &mut cc_impl_files,
+    )?;
     if rs_bridge_files.is_empty() {
-        bail!("No Rust FFI bridge files (.rs) were successfully paired with .cc and .h files for compilation. Searched based on headers in {:?}.", project_bridge_h_dir);
+        bail!("No Rust FFI bridge files (.rs) were successfully paired with .cc and .h files for compilation. Searched based on headers in {:?}.", project_bridge_h_base_dir);
     }
 
     // --- Configure cxx-build ---

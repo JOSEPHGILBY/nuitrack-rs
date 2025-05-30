@@ -5,10 +5,10 @@
 
 namespace nuitrack_bridge::core {
     
-    void init(rust::Str config_path_str) {
-        std::string config_path(config_path_str);
+    void init(rust::Str configPath) {
+        std::string configPathCvt(configPath);
         try {
-            tdv::nuitrack::Nuitrack::init(config_path);
+            Nuitrack::init(configPathCvt);
         }
         catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(std::string("Nuitrack init failed (tdv::nuitrack::Exception): ") + e.what());
@@ -21,7 +21,7 @@ namespace nuitrack_bridge::core {
     void run() {
         try {
             // The static Nuitrack::run() method itself handles C API calls and exception translation
-            tdv::nuitrack::Nuitrack::run();
+            Nuitrack::run();
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(std::string("Nuitrack run failed: ") + e.what());
         } catch (const std::exception& e) {
@@ -33,7 +33,7 @@ namespace nuitrack_bridge::core {
 
     void update() {
         try {
-            tdv::nuitrack::Nuitrack::update();
+            Nuitrack::update();
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(std::string("Nuitrack update failed: ") + e.what());
         } catch (const std::exception& e) {
@@ -43,9 +43,9 @@ namespace nuitrack_bridge::core {
         }
     }
 
-    void waitUpdateHandTracker(const std::shared_ptr<tdv::nuitrack::HandTracker>& hand_tracker_ptr) {
+    void waitUpdateHandTracker(const std::shared_ptr<HandTracker>& handTracker) {
         try {
-            tdv::nuitrack::Nuitrack::waitUpdate(hand_tracker_ptr);
+            Nuitrack::waitUpdate(handTracker);
         } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { // Handle specific exceptions if needed
             throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate: ") + e.what());
         } catch (const tdv::nuitrack::Exception& e) {
@@ -53,9 +53,9 @@ namespace nuitrack_bridge::core {
         } // ...
     }
 
-    void waitUpdateSkeletonTracker(const std::shared_ptr<tdv::nuitrack::SkeletonTracker>& skeleton_tracker_ptr) {
+    void waitUpdateSkeletonTracker(const std::shared_ptr<SkeletonTracker>& skeletonTracker) {
         try {
-            tdv::nuitrack::Nuitrack::waitUpdate(skeleton_tracker_ptr);
+            Nuitrack::waitUpdate(skeletonTracker);
         } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { 
             throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(SkeletonTracker): ") + e.what());
         } catch (const tdv::nuitrack::Exception& e) {
@@ -72,7 +72,7 @@ namespace nuitrack_bridge::core {
         try {
             // The static Nuitrack::release() method handles C API calls,
             // internal callback struct cleanup, and exception translation
-            tdv::nuitrack::Nuitrack::release();
+            Nuitrack::release();
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(std::string("Nuitrack release failed: ") + e.what());
         } catch (const std::exception& e) {

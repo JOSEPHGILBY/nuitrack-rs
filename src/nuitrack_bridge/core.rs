@@ -4,8 +4,8 @@ pub mod ffi {
 
     #[namespace = "tdv::nuitrack"] // Ensure this is the correct C++ namespace for HandTracker
     unsafe extern "C++" {
-        type HandTracker = crate::nuitrack_bridge::hand_tracker::ffi::HandTracker; // This refers to ::tdv::nuitrack::HandTracker
-        type SkeletonTracker = crate::nuitrack_bridge::skeleton_tracker::ffi::SkeletonTracker;
+        type HandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker; // This refers to ::tdv::nuitrack::HandTracker
+        type SkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker;
     }
 
     unsafe extern "C++" {

@@ -1,91 +1,82 @@
-use std::{error::Error, fmt};
+use cxx::{SharedPtr, UniquePtr, CxxVector};
+use crate::nuitrack_bridge::types::hand_data::ffi as hand_data_ffi;
 
-use cxx::SharedPtr;
-use crate::nuitrack_bridge::hand_tracker::ffi::{self as ht_ffi, BridgedHandTrackerData};
-
-use super::hand::Hand;
-use tracing::{debug};
-
-#[derive(Debug, Clone)]
-pub struct UserHandsData {
-    pub user_id: i32,
-    pub left_hand: Option<Hand>,
-    pub right_hand: Option<Hand>,
-}
+// Import the public Rust UserHands type we defined earlier
+use super::hand::UserHands; 
+use super::error::{NuitrackError, Result as NuitrackResult};
 
 pub struct HandFrame {
-    internal_ptr: SharedPtr<BridgedHandTrackerData>,
+    /// Internal pointer to the FFI HandData object.
+    internal_ptr: SharedPtr<hand_data_ffi::HandData>,
 }
 
 impl HandFrame {
-    pub(crate) fn new(ffi_ptr: SharedPtr<BridgedHandTrackerData>) -> Option<Self> {
+    /// Creates a new `HandFrame` from a shared pointer to the FFI `HandData` object.
+    ///
+    /// Returns `None` if the provided FFI pointer is null.
+    pub(crate) fn new(ffi_ptr: SharedPtr<hand_data_ffi::HandData>) -> Option<Self> {
         if ffi_ptr.is_null() {
-            debug!(target: "nuitrack_rs::frame", "Attempted to create HandFrameData from null FFI pointer.");
             None
         } else {
             Some(HandFrame { internal_ptr: ffi_ptr })
         }
     }
 
-    pub fn timestamp(&self) -> Result<u64, cxx::Exception> {
-        ht_ffi::get_data_timestamp(&self.internal_ptr)
+    /// Gets the number of users for whom hand data is available in this frame.
+    ///
+    /// # Returns
+    /// A `NuitrackResult` containing the number of users, or an error if the
+    /// FFI call fails.
+    pub fn num_users(&self) -> NuitrackResult<i32> {
+        // Calls the FFI function on the internal HandData pointer.
+        // The `?` operator propagates any error from the FFI call.
+        Ok(hand_data_ffi::num_users(&self.internal_ptr)?)
     }
 
-    pub fn num_users(&self) -> Result<i32, cxx::Exception> {
-        ht_ffi::get_data_num_users(&self.internal_ptr)
-    }
+    /// Gets a list of `UserHands` objects, each representing the detected hands
+    /// for a specific user in this frame.
+    ///
+    /// # Returns
+    /// A `NuitrackResult` containing a vector of `UserHands`, or an error if
+    /// the FFI call or data conversion fails.
+    pub fn users_hands(&self) -> NuitrackResult<Vec<UserHands>> {
+        // 1. Call the FFI function to get a UniquePtr to a CxxVector of FFI UserHands.
+        let ffi_users_hands_ptr: UniquePtr<CxxVector<hand_data_ffi::UserHands>> = 
+            hand_data_ffi::users_hands(&self.internal_ptr)?;
 
-    pub fn users_hands_vector_size(&self) -> Result<usize, cxx::Exception> {
-        ht_ffi::get_users_hands_vector_size(&self.internal_ptr)
-    }
+        // 2. Get a safe reference to the CxxVector.
+        // If the UniquePtr is null (shouldn't happen if FFI call succeeded without error
+        // and Nuitrack returned valid data), or if as_ref() fails, return an error.
+        let ffi_users_hands_vec_ref: &CxxVector<hand_data_ffi::UserHands> = ffi_users_hands_ptr.as_ref()
+            .ok_or_else(|| NuitrackError::OperationFailed(
+                "Failed to get CxxVector<UserHands> reference from UniquePtr.".into()
+            ))?;
 
-    pub fn user_hands_at_index(&self, index: usize) -> Result<UserHandsData, Box<dyn Error>> {
-        let user_id = ht_ffi::get_user_id_at(&self.internal_ptr, index)?;
+        // 3. Prepare a Rust Vec to store the converted UserHands.
+        let mut rust_user_hands_list = Vec::with_capacity(ffi_users_hands_vec_ref.len());
 
-        let left_ffi_ptr = ht_ffi::get_left_hand_at(&self.internal_ptr, index)?;
-        let left_hand = Hand::new(left_ffi_ptr);
-
-        let right_ffi_ptr = ht_ffi::get_right_hand_at(&self.internal_ptr, index)?;
-        let right_hand = Hand::new(right_ffi_ptr);
-
-        Ok(UserHandsData {
-            user_id,
-            left_hand,
-            right_hand,
-        })
-    }
-
-    // You could also provide an iterator over users
-    // pub fn users_iter(&self) -> impl Iterator<Item = Result<UserHandsData, Box<dyn Error>>> + '_ { ... }
-}
-
-
-impl fmt::Debug for HandFrame {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut ds = f.debug_struct("HandFrameData");
-        if self.internal_ptr.is_null() {
-            ds.field("status", &"null_internal_pointer");
-        } else {
-            // Call getter methods and format their results.
-            // Using .ok() on the NuitrackResult<T> will give Option<T>, which is Debug.
-            // Errors from these getters are already logged by the methods themselves if instrumented.
-            ds.field("timestamp", &self.timestamp().ok());
-            ds.field("num_users", &self.num_users().ok());
-            // For users_hands_vector_size, you might want to be more specific or show first user
-            match self.users_hands_vector_size() {
-                Ok(size) => {
-                    ds.field("users_hands_vector_size", &size);
-                    // Optionally, you could try to show the first user's hands if present,
-                    // but be careful about making Debug too verbose or error-prone.
-                    // if size > 0 {
-                    //     ds.field("first_user_hands (details)", &self.user_hands_at_index(0).ok());
-                    // }
-                }
-                Err(_) => {
-                    ds.field("users_hands_vector_size", &"Error retrieving size");
-                }
-            }
+        // 4. Iterate over the FFI UserHands objects in the CxxVector.
+        for ffi_user_hands_ref in ffi_users_hands_vec_ref {
+            // Convert each FFI UserHands object to the public Rust UserHands type.
+            // The `from_ffi_user_hands` function is defined in `super::hand::UserHands`.
+            // The `?` operator propagates any error from this conversion.
+            rust_user_hands_list.push(UserHands::from_ffi_user_hands(ffi_user_hands_ref)?);
         }
-        ds.finish()
+
+        // 5. Return the list of converted Rust UserHands objects.
+        Ok(rust_user_hands_list)
+    }
+    
+    /// Gets the timestamp of this hand data frame in microseconds.
+    ///
+    /// The timestamp indicates the time point to which the hand data corresponds.
+    /// The exact meaning of this value can depend on the depth provider.
+    ///
+    /// # Returns
+    /// A `NuitrackResult` containing the timestamp, or an error if the
+    /// FFI call fails.
+    pub fn timestamp(&self) -> NuitrackResult<u64> {
+        // Calls the FFI function on the internal HandData pointer.
+        Ok(hand_data_ffi::timestamp(&self.internal_ptr)?)
     }
 }

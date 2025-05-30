@@ -8,12 +8,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::nuitrack_bridge::{core::ffi as core_ffi, device::ffi as device_ffi};
 use super::async_dispatch::run_blocking;
+use super::skeleton_tracker::AsyncSkeletonTracker;
 use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};
 use crate::nuitrack::shared_types::session_config::{
     DeviceConfig, DeviceSelector, DiscoveredDeviceInfo, ModuleType
 };
 use super::session::{
-    ActiveDeviceContext, NuitrackRuntimeGuard, NuitrackSession, WaitableModuleFfiVariant, NUITRACK_GLOBAL_API_LOCK // Made pub(crate) in session.rs
+    ActiveDeviceContext, NuitrackRuntimeGuard, NuitrackSession, WaitableModuleFFIVariant, NUITRACK_GLOBAL_API_LOCK // Made pub(crate) in session.rs
 };
 // Import your async module wrappers
 use super::hand_tracker::AsyncHandTracker;
@@ -129,22 +130,23 @@ impl NuitrackSessionBuilder {
     async fn fetch_available_devices_info_internal() -> NuitrackResult<Vec<DiscoveredDeviceInfo>> {
         run_blocking(move || {
             let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for getDeviceList".into()))?;
-            let ffi_list = device_ffi::get_nuitrack_device_list()
+            let devices = device_ffi::get_devices()
                 .map_err(|e| NuitrackError::DeviceError(format!("FFI GetDeviceList: {}", e)))?;
-            
             let mut devices_info_vec = Vec::new();
-            for i in 0..ffi_list.device_list_len() {
-                let dev_ptr = ffi_list.device_list_get(i);
-                let name = device_ffi::get_device_info(&dev_ptr, device_ffi::DeviceInfoType::DEVICE_NAME).unwrap_or_else(|_| "N/A".to_string());
-                let serial = device_ffi::get_device_info(&dev_ptr, device_ffi::DeviceInfoType::SERIAL_NUMBER).unwrap_or_else(|_| "N/A".to_string());
-                let provider = device_ffi::get_device_info(&dev_ptr, device_ffi::DeviceInfoType::PROVIDER_NAME).unwrap_or_else(|_| "N/A".to_string());
+            for i in 0..devices.len() {
+                let Some(wrapped_device) = devices.get(i) else { continue };
+                let device = device_ffi::unwrap_shared_ptr_device(wrapped_device);
+                let name = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::DEVICE_NAME).unwrap_or_else(|_| "N/A".to_string());
+                let serial = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::SERIAL_NUMBER).unwrap_or_else(|_| "N/A".to_string());
+                let provider = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::PROVIDER_NAME).unwrap_or_else(|_| "N/A".to_string());
                 devices_info_vec.push(DiscoveredDeviceInfo { 
                     name, 
                     serial_number: serial, 
                     provider_name: provider, 
                     original_index: i, 
-                    ffi_device_ptr: dev_ptr // Essential for selection
+                    ffi_device_ptr: device // Essential for selection
                 });
+                
             }
             Ok(devices_info_vec)
         }).await
@@ -154,9 +156,9 @@ impl NuitrackSessionBuilder {
     async fn configure_devices_and_modules(
         available_devices_cache: Vec<DiscoveredDeviceInfo>,
         user_device_configs: Vec<DeviceConfig>,
-    ) -> NuitrackResult<(Vec<ActiveDeviceContext>, Vec<WaitableModuleFfiVariant>)> {
+    ) -> NuitrackResult<(Vec<ActiveDeviceContext>, Vec<WaitableModuleFFIVariant>)> {
         let mut active_devices_built = Vec::new();
-        let mut modules_for_update_loop: Vec<WaitableModuleFfiVariant> = Vec::new();
+        let mut modules_for_update_loop: Vec<WaitableModuleFFIVariant> = Vec::new();
 
         if user_device_configs.is_empty() && !available_devices_cache.is_empty() {
              println!("[NuitrackSessionBuilder] No device configurations provided, but devices are available. No modules will be activated by default in this path.");
@@ -174,7 +176,7 @@ impl NuitrackSessionBuilder {
                 let ptr_for_set = target_ffi_device_ptr_clone.clone();
                 run_blocking(move || {
                     let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for set_device".into()))?;
-                    device_ffi::set_device(ptr_for_set)
+                    device_ffi::set_device(&ptr_for_set)
                         .map_err(|cxx_e| NuitrackError::DeviceError(format!("FFI Nuitrack::setDevice failed: {}", cxx_e)))
                         // Alternatively, for a more generic FFI error:
                         // .map_err(NuitrackError::from)
@@ -182,26 +184,29 @@ impl NuitrackSessionBuilder {
             }
 
             let mut ad_context = ActiveDeviceContext {
-                info: selected_device_info_ref.clone(), // Clone DiscoveredDeviceInfo
-                hand_tracker: None, skeleton_tracker: None, // Initialize all to None
+                info: selected_device_info_ref.clone(),
+                hand_tracker: None, 
+                skeleton_tracker: None,
             };
             
-            let mut representative_module_for_device: Option<WaitableModuleFfiVariant> = None;
+            let mut representative_module_for_device: Option<WaitableModuleFFIVariant> = None;
 
             for module_type in dev_config.modules_to_create {
                 match module_type {
                     ModuleType::HandTracker => {
                         let ht = AsyncHandTracker::new_async().await?; // Assumes device is set
                         if representative_module_for_device.is_none() { // Prefer HandTracker if Skeleton not chosen
-                           representative_module_for_device = Some(WaitableModuleFfiVariant::Hand(ht.get_ffi_ptr_clone()));
+                           representative_module_for_device = Some(WaitableModuleFFIVariant::Hand(ht.get_ffi_ptr_clone()));
                         }
                         ad_context.hand_tracker = Some(ht);
                     }
                     ModuleType::SkeletonTracker => {
-                        //let st = crate::nuitrack::skeleton_tracker::AsyncSkeletonTracker::new_async().await?;
-                        // SkeletonTracker is a good representative for waitUpdate
-                        //representative_module_for_device = Some(WaitableModuleFfiVariant::Skeleton(st.get_ffi_ptr_clone()));
-                        //ad_context.skeleton_tracker = Some(st);
+                        let st = AsyncSkeletonTracker::new_async().await?;
+                        if representative_module_for_device.is_none() {
+                            representative_module_for_device = Some(WaitableModuleFFIVariant::Skeleton(st.get_ffi_ptr_clone()));
+                        }
+                        ad_context.skeleton_tracker = Some(st);
+                        
                     }
                     _ => {}
                     // ... other module types like DepthSensor, ColorSensor, UserTracker ...

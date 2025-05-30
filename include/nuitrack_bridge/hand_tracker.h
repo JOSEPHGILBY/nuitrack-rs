@@ -17,9 +17,8 @@ namespace nuitrack_bridge::hand_tracker {
     // Aliases for Nuitrack types
     using HandTracker = tdv::nuitrack::HandTracker;
     // using HandTrackerData = tdv::nuitrack::HandTrackerData;
-    using NuitrackHand = tdv::nuitrack::Hand; // Alias for tdv::nuitrack::Hand to avoid ambiguity
-
-    using c_void = void; // <--- ADD THIS ALIAS
+    using Hand = tdv::nuitrack::Hand; // Alias for tdv::nuitrack::Hand to avoid ambiguity
+    using c_void = void;
 
     struct BridgedHandTrackerData {
         std::shared_ptr<tdv::nuitrack::HandTrackerData> ptr;
@@ -47,7 +46,8 @@ namespace nuitrack_bridge::hand_tracker {
 
     void disconnect_on_update_wrapper(
         const std::shared_ptr<HandTracker>& tracker,
-        uint64_t handler_id);
+        uint64_t handler_id
+    );
 
 
     uint64_t get_data_timestamp(const BridgedHandTrackerData& bht_data);
@@ -55,16 +55,16 @@ namespace nuitrack_bridge::hand_tracker {
     size_t get_users_hands_vector_size(const BridgedHandTrackerData& bht_data);
 
     int32_t get_user_id_at(const BridgedHandTrackerData& bht_data, size_t user_vec_idx);
-    std::shared_ptr<NuitrackHand> get_left_hand_at(const BridgedHandTrackerData& bht_data, size_t user_vec_idx);
-    std::shared_ptr<NuitrackHand> get_right_hand_at(const BridgedHandTrackerData& bht_data, size_t user_vec_idx);
+    std::shared_ptr<Hand> get_left_hand_at(const BridgedHandTrackerData& bht_data, size_t user_vec_idx);
+    std::shared_ptr<Hand> get_right_hand_at(const BridgedHandTrackerData& bht_data, size_t user_vec_idx);
 
-    float get_hand_x(const NuitrackHand& hand);
-    float get_hand_y(const NuitrackHand& hand);
-    bool get_hand_is_click(const NuitrackHand& hand); // Renamed for clarity
-    int32_t get_hand_pressure(const NuitrackHand& hand);
-    float get_hand_x_real(const NuitrackHand& hand);
-    float get_hand_y_real(const NuitrackHand& hand);
-    float get_hand_z_real(const NuitrackHand& hand);
+    float get_hand_x(const Hand& hand);
+    float get_hand_y(const Hand& hand);
+    bool get_hand_is_click(const Hand& hand); // Renamed for clarity
+    int32_t get_hand_pressure(const Hand& hand);
+    float get_hand_x_real(const Hand& hand);
+    float get_hand_y_real(const Hand& hand);
+    float get_hand_z_real(const Hand& hand);
 
 }
 

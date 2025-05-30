@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
-use super::async_dispatch::run_blocking;
+use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker};
 
 use crate::nuitrack::shared_types::{
     error::{NuitrackError, Result as NuitrackResult}, 
@@ -19,8 +19,8 @@ use crate::nuitrack_bridge::core::ffi as core_ffi;
 
 // --- FFI Type Aliases for WaitableModuleFfiVariant ---
 // Ensure these paths are correct and these FFI types are Send+Sync marked in their bridge files
-type FfiHandTracker = crate::nuitrack_bridge::hand_tracker::ffi::HandTracker;
-type FfiSkeletonTracker = crate::nuitrack_bridge::skeleton_tracker::ffi::SkeletonTracker; // Ensure this bridge exists
+type FFIHandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker;
+type FFISkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker; // Ensure this bridge exists
 
 // --- Make these crate-visible ---
 pub(crate) static IS_NUITRACK_RUNTIME_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -32,8 +32,8 @@ pub struct ActiveDeviceContext {
     //pub depth_sensor: Option<crate::nuitrack::depth::AsyncDepthSensor>, // Placeholder
     //pub color_sensor: Option<crate::nuitrack::color::AsyncColorSensor>, // Placeholder
     //pub user_tracker: Option<crate::nuitrack::user::AsyncUserTracker>, // Placeholder
-    pub skeleton_tracker: Option<crate::nuitrack::async_api::hand_tracker::AsyncHandTracker>, // Placeholder
-    pub hand_tracker: Option<crate::nuitrack::async_api::hand_tracker::AsyncHandTracker>,
+    pub skeleton_tracker: Option<AsyncSkeletonTracker>, // Placeholder
+    pub hand_tracker: Option<AsyncHandTracker>,
     // pub other_tracker: Option<AsyncOtherTracker>, // Example for your second tracker
 }
 
@@ -100,9 +100,9 @@ impl Drop for NuitrackRuntimeGuard {
 /// Enum to hold different types of FFI module pointers for the update loop.
 /// Make this pub(crate) so session_builder.rs can construct it.
 #[derive(Clone)]
-pub(crate) enum WaitableModuleFfiVariant {
-    Hand(SharedPtr<FfiHandTracker>),
-    Skeleton(SharedPtr<FfiSkeletonTracker>),
+pub(crate) enum WaitableModuleFFIVariant {
+    Hand(SharedPtr<FFIHandTracker>),
+    Skeleton(SharedPtr<FFISkeletonTracker>),
     // Add other waitable module FFI types here
 }
 
@@ -114,7 +114,7 @@ pub struct NuitrackSession {
     
     // Store the FFI pointers for the internal loop directly
     #[cfg(feature = "tokio_runtime")]
-    modules_for_internal_loop: Vec<WaitableModuleFfiVariant>, // New field
+    modules_for_internal_loop: Vec<WaitableModuleFFIVariant>, // New field
 
     #[cfg(feature = "tokio_runtime")]
     cancellation_token: Option<Arc<CancellationToken>>,
@@ -126,7 +126,7 @@ impl NuitrackSession {
     pub(crate) fn new(
         guard: NuitrackRuntimeGuard,
         active_devices: Vec<ActiveDeviceContext>,
-        modules_for_update_loop: Vec<WaitableModuleFfiVariant>,
+        modules_for_update_loop: Vec<WaitableModuleFFIVariant>,
         run_internal_update_loop: bool,
     ) -> NuitrackResult<Self> {
         Ok(Self {
@@ -184,14 +184,14 @@ impl NuitrackSession {
                                         for module_variant in &modules_to_wait_on {
                                             if token.is_cancelled() { break 'update_loop; }
                                             let wait_result = match module_variant {
-                                                WaitableModuleFfiVariant::Hand(ptr) => {
+                                                WaitableModuleFFIVariant::Hand(ptr) => {
                                                     let ptr_clone = ptr.clone();
                                                     run_blocking(move || {
                                                         core_ffi::wait_update_hand_tracker(&ptr_clone)
                                                             .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
                                                     }).await
                                                 }
-                                                WaitableModuleFfiVariant::Skeleton(ptr) => {
+                                                WaitableModuleFFIVariant::Skeleton(ptr) => {
                                                     let ptr_clone = ptr.clone();
                                                     run_blocking(move || {
                                                         // Ensure you have this FFI function bridged:
