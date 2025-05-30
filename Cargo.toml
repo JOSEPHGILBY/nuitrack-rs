@@ -23,6 +23,10 @@ include = [
     "LICENSE",           # Ensure this filename matches your actual license file
 ]
 
+exclude = [
+    "/vendor"
+]
+
 
 [workspace]
 members = [
