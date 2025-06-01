@@ -188,7 +188,7 @@ macro_rules! generate_async_tracker {
     ) => {
         #[unsafe(no_mangle)]
         pub extern "C" fn $dispatcher_name(
-            $ffi_arg_name: $ffi_arg_type,
+            $ffi_arg_name: &$ffi_arg_type,
             $user_data_arg_name: *mut $c_void_type,
         ) {
             if $user_data_arg_name.is_null() {

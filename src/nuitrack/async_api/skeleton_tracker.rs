@@ -24,7 +24,7 @@ generate_async_tracker! {
                 ffi_arg_name: data,
                 ffi_arg_type: cxx::SharedPtr<crate::nuitrack_bridge::types::skeleton_data::ffi::SkeletonData>,
                 user_data_arg_name: sender_ptr, // Changed name for clarity in dispatcher
-                conversion_logic: |data_arg| crate::nuitrack::shared_types::skeleton_frame::SkeletonFrame::new(data_arg),
+                conversion_logic: |data_arg: &cxx::SharedPtr<crate::nuitrack_bridge::types::skeleton_data::ffi::SkeletonData>| crate::nuitrack::shared_types::skeleton_frame::SkeletonFrame::new(data_arg.clone()),
                 conversion_error_msg: "FFI SkeletonData was null or invalid",
             }}
         },

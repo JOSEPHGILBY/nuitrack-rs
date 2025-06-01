@@ -96,7 +96,7 @@ namespace nuitrack_bridge::skeleton_tracker {
 
 extern "C" {
     void rust_skeleton_tracker_callback_which_sends_for_async(
-        std::shared_ptr<tdv::nuitrack::SkeletonData> data,
+        std::shared_ptr<tdv::nuitrack::SkeletonData>& data,
         void* skeletonFrameSender
     );
 

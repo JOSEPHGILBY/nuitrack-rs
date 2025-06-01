@@ -45,7 +45,7 @@ namespace nuitrack_bridge::hand_tracker {
 extern "C" {
     // Rust dispatcher function to be called by the C++ lambda
     void rust_hand_tracker_on_update_dispatcher(
-        std::shared_ptr<tdv::nuitrack::HandTrackerData> data,
+        std::shared_ptr<tdv::nuitrack::HandTrackerData>& data,
         void* handFrameSender
     );
 }

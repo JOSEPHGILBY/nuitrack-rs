@@ -43,7 +43,7 @@ generate_async_tracker! {
                 // Name of the user_data (sender pointer) argument
                 user_data_arg_name: sender_ptr, 
                 // Closure to convert FFI data to the public Rust item type
-                conversion_logic: |data_arg| crate::nuitrack::shared_types::hand_frame::HandFrame::new(data_arg),
+                conversion_logic: |data_arg: &cxx::SharedPtr<crate::nuitrack_bridge::types::hand_data::ffi::HandData>| crate::nuitrack::shared_types::hand_frame::HandFrame::new(data_arg.clone()),
                 // Error message if conversion_logic returns None
                 conversion_error_msg: "FFI HandData was null or invalid for HandFrameStream",
             }}
