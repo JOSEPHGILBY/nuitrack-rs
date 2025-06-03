@@ -52,7 +52,7 @@ impl NuitrackRuntimeGuard {
 
         let config_path_owned = config_path_str.to_string();
         if let Err(e) = run_blocking(move || {
-            let _global_lock_guard_inner = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|e| {
+            let _global_lock_guard_inner = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
                 NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during init attempt".into())
             })?;
             core_ffi::init(&config_path_owned)
@@ -263,7 +263,12 @@ impl NuitrackSession {
             // Determine which module to wait on for this device
             // This logic should align with how modules_for_internal_loop is populated
             let mut waited = false;
-            if let Some(st_wrapper) = &device_ctx.skeleton_tracker { // Prioritize skeleton
+            if let Some(cs_wrapper) = &device_ctx.color_sensor { // Prioritize skeleton
+                let ptr_clone = cs_wrapper.get_ffi_ptr_clone();
+                run_blocking(move || core_ffi::wait_update_color_sensor(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_color_sensor: {}", e)))).await?;
+                waited = true;
+            } else if let Some(st_wrapper) = &device_ctx.skeleton_tracker { // Prioritize skeleton
                 let ptr_clone = st_wrapper.get_ffi_ptr_clone();
                 run_blocking(move || core_ffi::wait_update_skeleton_tracker(&ptr_clone)
                     .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e)))).await?;

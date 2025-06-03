@@ -165,7 +165,7 @@ macro_rules! generate_async_tracker {
                         }
                     }
                     if let Some(raw_ptr) = self.$raw_sender_field.take() {
-                        unsafe { Box::from_raw(raw_ptr as *mut $sender_type_alias) };
+                        unsafe { let _ = Box::from_raw(raw_ptr as *mut $sender_type_alias); };
                     }
                 )*
             }
