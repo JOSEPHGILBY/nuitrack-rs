@@ -15,7 +15,7 @@ namespace nuitrack_bridge::hand {
     float getHandX(const Hand& hand);
     float getHandY(const Hand& hand);
     bool getHandClick(const Hand& hand);
-    int getHandPressure(const Hand& hand);
+    int32_t getHandPressure(const Hand& hand);
     float getHandXReal(const Hand& hand);
     float getHandYReal(const Hand& hand);
     float getHandZReal(const Hand& hand);
@@ -24,9 +24,5 @@ namespace nuitrack_bridge::hand {
     int32_t getUserHandsUserId(const UserHands& userHands);
     std::shared_ptr<Hand> getUserHandsLeftHand(const UserHands& userHands);
     std::shared_ptr<Hand> getUserHandsRightHand(const UserHands& userHands);
-
-    void doNotUseMakeUserHandsVectorElementAware(const std::vector<UserHands>& vec);
-    void doNotUseMakeHandSharedPtrAware(const std::shared_ptr<Hand>& handPtr);
-
 
 } // namespace nuitrack_bridge::hand

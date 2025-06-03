@@ -43,14 +43,32 @@ namespace nuitrack_bridge::core {
         }
     }
 
+    void waitUpdateColorSensor(const std::shared_ptr<ColorSensor>& colorSensor) {
+        try {
+            Nuitrack::waitUpdate(colorSensor);
+        } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { // Handle specific exceptions if needed
+            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(ColorSensor): ") + e.what());
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack waitUpdate(ColorSensor) failed: ") + e.what());
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Exception during Nuitrack waitUpdate(ColorSensor): ") + e.what());
+        } catch (...) {
+            throw std::runtime_error("Unknown exception during Nuitrack waitUpdate(ColorSensor)");
+        }
+    }
+
     void waitUpdateHandTracker(const std::shared_ptr<HandTracker>& handTracker) {
         try {
             Nuitrack::waitUpdate(handTracker);
         } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { // Handle specific exceptions if needed
-            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate: ") + e.what());
+            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(HandTracker): ") + e.what());
         } catch (const tdv::nuitrack::Exception& e) {
-            throw std::runtime_error(std::string("Nuitrack waitUpdate failed: ") + e.what());
-        } // ...
+            throw std::runtime_error(std::string("Nuitrack waitUpdate(HandTracker) failed: ") + e.what());
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Exception during Nuitrack waitUpdate(HandTracker): ") + e.what());
+        } catch (...) {
+            throw std::runtime_error("Unknown exception during Nuitrack waitUpdate(HandTracker)");
+        }
     }
 
     void waitUpdateSkeletonTracker(const std::shared_ptr<SkeletonTracker>& skeletonTracker) {

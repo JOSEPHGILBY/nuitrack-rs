@@ -19,8 +19,4 @@ namespace nuitrack_bridge::hand_data {
         return std::make_unique<std::vector<UserHands>>(data.getUsersHands());
     }
 
-    void doNotUseMakeHandTrackerDataSharedPtrAware(const std::shared_ptr<HandData>& /*data*/) {
-        // No-op
-    }
-
 }

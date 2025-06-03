@@ -4,6 +4,7 @@ pub mod ffi {
 
     #[namespace = "tdv::nuitrack"] // Ensure this is the correct C++ namespace for HandTracker
     unsafe extern "C++" {
+        type ColorSensor = crate::nuitrack_bridge::modules::color_sensor::ffi::ColorSensor;
         type HandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker; // This refers to ::tdv::nuitrack::HandTracker
         type SkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker;
     }
@@ -14,6 +15,9 @@ pub mod ffi {
         fn init(config_path: &str) -> Result<()>;
         pub fn run() -> Result<()>;
         pub fn update() -> Result<()>;
+
+        #[cxx_name = "waitUpdateColorSensor"]
+        fn wait_update_color_sensor(module: &SharedPtr<ColorSensor>) -> Result<()>;
 
         #[cxx_name = "waitUpdateHandTracker"]
         fn wait_update_hand_tracker(module: &SharedPtr<HandTracker>) -> Result<()>;

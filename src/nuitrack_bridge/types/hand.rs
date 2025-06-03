@@ -7,6 +7,9 @@ pub mod ffi {
         type UserHands;
     }
 
+    impl SharedPtr<Hand> {}
+    impl CxxVector<UserHands> {}
+
     unsafe extern "C++" {
         include!("nuitrack_bridge/types/hand.h");
 
@@ -34,11 +37,5 @@ pub mod ffi {
         pub fn user_hands_left_hand(user_hands: &UserHands) -> SharedPtr<Hand>;
         #[cxx_name = "getUserHandsRightHand"] // Corrected
         pub fn user_hands_right_hand(user_hands: &UserHands) -> SharedPtr<Hand>;
-
-        // Type awareness helpers
-        #[cxx_name = "doNotUseMakeUserHandsVectorElementAware"] // Corrected
-        fn do_not_use_make_user_hands_vector_element_aware(vec: &CxxVector<UserHands>);
-        #[cxx_name = "doNotUseMakeHandSharedPtrAware"] // Corrected
-        fn do_not_use_make_hand_shared_ptr_aware(hand_ptr: &SharedPtr<Hand>);
     }
 }

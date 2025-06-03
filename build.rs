@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::env;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -397,24 +396,57 @@ fn configure_native_build(
         bail!("Bridge modules source directory not found at: {:?}", project_bridge_src_base_dir);
     }
 
-    let mut rs_bridge_files = Vec::new();
-    let mut cc_impl_files = Vec::new();
+    let mut rs_bridge_files_abs = Vec::new();
+    let mut cc_impl_files_abs = Vec::new();
 
     println!("cargo:warning=Scanning for FFI headers in {:?} to find modules...", project_bridge_h_base_dir);
     scan_for_modules_recursive(
         &project_bridge_h_base_dir,    // dir_to_scan (starts at base)
         &project_bridge_h_base_dir,    // base_include_dir (for stripping prefix)
         &project_bridge_src_base_dir,  // base_src_dir (for joining relative paths)
-        &mut rs_bridge_files,
-        &mut cc_impl_files,
+        &mut rs_bridge_files_abs,
+        &mut cc_impl_files_abs,
     )?;
-    if rs_bridge_files.is_empty() {
+    if rs_bridge_files_abs.is_empty() {
         bail!("No Rust FFI bridge files (.rs) were successfully paired with .cc and .h files for compilation. Searched based on headers in {:?}.", project_bridge_h_base_dir);
     }
 
+    let mut rs_bridge_files_rel = Vec::new();
+    for path in &rs_bridge_files_abs {
+        rs_bridge_files_rel.push(
+            path.strip_prefix(crate_root_dir)
+                .with_context(|| {
+                    format!(
+                        "Failed to make Rust bridge file path '{}' relative to crate root '{}'",
+                        path.display(),
+                        crate_root_dir.display()
+                    )
+                })?
+                .to_path_buf(),
+        );
+    }
+    println!("cargo:warning=Relative RS bridge files for cxx_build: {:?}", rs_bridge_files_rel.iter().map(|p| p.display().to_string()).collect::<Vec<_>>());
+
+
+    let mut cc_impl_files_rel = Vec::new();
+    for path in &cc_impl_files_abs {
+        cc_impl_files_rel.push(
+            path.strip_prefix(crate_root_dir)
+                .with_context(|| {
+                    format!(
+                        "Failed to make C++ impl file path '{}' relative to crate root '{}'",
+                        path.display(),
+                        crate_root_dir.display()
+                    )
+                })?
+                .to_path_buf(),
+        );
+    }
+    println!("cargo:warning=Relative CC impl files for cxx_build: {:?}", cc_impl_files_rel.iter().map(|p| p.display().to_string()).collect::<Vec<_>>());
+
     // --- Configure cxx-build ---
-    let mut build = cxx_build::bridges(&rs_bridge_files);
-    build.files(&cc_impl_files)
+    let mut build = cxx_build::bridges(&rs_bridge_files_rel);
+    build.files(&cc_impl_files_rel)
         .include(&nuitrack_sdk_include_dir)      // For Nuitrack SDK's own headers (e.g., <nuitrack/Nuitrack.h>)
         .include(crate_root_dir.join("include")) // Base for your project's FFI headers (e.g., "nuitrack_bridge/core.h")
         .flag_if_supported("/EHsc")             // For MSVC C++ exceptions

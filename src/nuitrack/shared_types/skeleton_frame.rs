@@ -21,11 +21,11 @@ impl SkeletonFrame {
     }
 
     pub fn get_num_skeletons(&self) -> NuitrackResult<i32> {
-        Ok(skeleton_data_ffi::get_num_skeletons(&self.internal_ptr)?)
+        Ok(skeleton_data_ffi::num_skeletons(&self.internal_ptr)?)
     }
 
     pub fn get_skeletons(&self) -> NuitrackResult<Vec<Skeleton>> {
-        let skeletons = skeleton_data_ffi::get_skeletons(&self.internal_ptr)?;
+        let skeletons = skeleton_data_ffi::skeletons(&self.internal_ptr)?;
         let ffi_skeletons_vec_ref = skeletons.as_ref()
             .ok_or_else(|| NuitrackError::OperationFailed("Failed to get skeletons vector".into()))?;
         let mut rust_skeletons = Vec::with_capacity(ffi_skeletons_vec_ref.len());
@@ -38,6 +38,6 @@ impl SkeletonFrame {
     }
     
     pub fn timestamp(&self) -> NuitrackResult<u64> {
-        Ok(skeleton_data_ffi::get_timestamp(&self.internal_ptr)?)
+        Ok(skeleton_data_ffi::timestamp(&self.internal_ptr)?)
     }
 }

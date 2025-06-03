@@ -62,13 +62,15 @@ pub mod ffi {
         type Skeleton;
     }
 
+    impl CxxVector<Skeleton> {}
+
     unsafe extern "C++" {
         include!("nuitrack_bridge/types/skeleton.h");
 
         type JointType;
         type Joint;
 
-        #[cxx_name = "getUserId"]
+        #[cxx_name = "getUserID"]
         pub fn user_id(skeleton: &Skeleton) -> i32;
 
         #[cxx_name = "getJoints"]
@@ -96,9 +98,6 @@ pub mod ffi {
 
         #[cxx_name = "getJointOrientationMatrix"]
         pub fn joint_orientation_matrix(joint: &Joint) -> Result<UniquePtr<CxxVector<f32>>>;
-
-        #[cxx_name = "doNotUseMakeVectorElementAware"]
-        fn do_not_use_make_vector_element_aware(data: &CxxVector<Skeleton>);
 
     }
 }

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
-use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker};
+use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker, color_sensor::AsyncColorSensor};
 
 use crate::nuitrack::shared_types::{
     error::{NuitrackError, Result as NuitrackResult}, 
@@ -19,6 +19,7 @@ use crate::nuitrack_bridge::core::ffi as core_ffi;
 
 // --- FFI Type Aliases for WaitableModuleFfiVariant ---
 // Ensure these paths are correct and these FFI types are Send+Sync marked in their bridge files
+type FFIColorSensor = crate::nuitrack_bridge::modules::color_sensor::ffi::ColorSensor;
 type FFIHandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker;
 type FFISkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker; // Ensure this bridge exists
 
@@ -30,7 +31,7 @@ pub(crate) static NUITRACK_GLOBAL_API_LOCK: std::sync::Mutex<()> = std::sync::Mu
 pub struct ActiveDeviceContext {
     pub info: DiscoveredDeviceInfo, // Resolved info of the active device
     //pub depth_sensor: Option<crate::nuitrack::depth::AsyncDepthSensor>, // Placeholder
-    //pub color_sensor: Option<crate::nuitrack::color::AsyncColorSensor>, // Placeholder
+    pub color_sensor: Option<AsyncColorSensor>, // Placeholder
     //pub user_tracker: Option<crate::nuitrack::user::AsyncUserTracker>, // Placeholder
     pub skeleton_tracker: Option<AsyncSkeletonTracker>, // Placeholder
     pub hand_tracker: Option<AsyncHandTracker>,
@@ -101,6 +102,7 @@ impl Drop for NuitrackRuntimeGuard {
 /// Make this pub(crate) so session_builder.rs can construct it.
 #[derive(Clone)]
 pub(crate) enum WaitableModuleFFIVariant {
+    ColorSensor(SharedPtr<FFIColorSensor>),
     Hand(SharedPtr<FFIHandTracker>),
     Skeleton(SharedPtr<FFISkeletonTracker>),
     // Add other waitable module FFI types here
@@ -184,6 +186,13 @@ impl NuitrackSession {
                                         for module_variant in &modules_to_wait_on {
                                             if token.is_cancelled() { break 'update_loop; }
                                             let wait_result = match module_variant {
+                                                WaitableModuleFFIVariant::ColorSensor(ptr) => {
+                                                    let ptr_clone = ptr.clone();
+                                                    run_blocking(move || {
+                                                        core_ffi::wait_update_color_sensor(&ptr_clone)
+                                                            .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
+                                                    }).await
+                                                }
                                                 WaitableModuleFFIVariant::Hand(ptr) => {
                                                     let ptr_clone = ptr.clone();
                                                     run_blocking(move || {

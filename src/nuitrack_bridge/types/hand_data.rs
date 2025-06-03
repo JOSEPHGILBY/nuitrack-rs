@@ -7,6 +7,8 @@ pub mod ffi {
         type UserHands = crate::nuitrack_bridge::types::hand::ffi::UserHands;
     }
 
+    impl SharedPtr<HandData> {}
+
     unsafe extern "C++" {
         include!("nuitrack_bridge/types/hand_data.h");
 
@@ -17,9 +19,6 @@ pub mod ffi {
         
         #[cxx_name = "getUsersHands"] // Corrected
         pub fn users_hands(data: &HandData) -> Result<UniquePtr<CxxVector<UserHands>>>;
-
-        #[cxx_name = "doNotUseMakeHandTrackerDataSharedPtrAware"] // Corrected
-        fn do_not_use_make_hand_tracker_data_shared_ptr_aware(data: &SharedPtr<HandData>);
     }
 }
 

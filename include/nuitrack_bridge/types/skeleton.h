@@ -11,7 +11,7 @@ namespace nuitrack_bridge::skeleton {
     using Joint = tdv::nuitrack::Joint;
     using Skeleton = tdv::nuitrack::Skeleton;
 
-    int32_t getUserId(const Skeleton& skeleton);
+    int32_t getUserID(const Skeleton& skeleton);
     std::unique_ptr<std::vector<Joint>> getJoints(const Skeleton& skeleton); // New
 
     // --- Joint functions ---
@@ -30,6 +30,4 @@ namespace nuitrack_bridge::skeleton {
 
     // Orientation (as a flat 3x3 matrix)
     std::unique_ptr<std::vector<float>> getJointOrientationMatrix(const Joint& joint); // New
-
-    void doNotUseMakeVectorElementAware(const std::vector<Skeleton>& data);
 }

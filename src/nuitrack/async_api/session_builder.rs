@@ -6,6 +6,7 @@ use cxx::SharedPtr;
 #[cfg(feature = "tokio_runtime")]
 use tokio_util::sync::CancellationToken;
 
+use crate::nuitrack::async_api::color_sensor::AsyncColorSensor;
 use crate::nuitrack_bridge::{core::ffi as core_ffi, device::ffi as device_ffi};
 use super::async_dispatch::run_blocking;
 use super::skeleton_tracker::AsyncSkeletonTracker;
@@ -185,6 +186,7 @@ impl NuitrackSessionBuilder {
 
             let mut ad_context = ActiveDeviceContext {
                 info: selected_device_info_ref.clone(),
+                color_sensor: None,
                 hand_tracker: None, 
                 skeleton_tracker: None,
             };
@@ -193,6 +195,13 @@ impl NuitrackSessionBuilder {
 
             for module_type in dev_config.modules_to_create {
                 match module_type {
+                    ModuleType::ColorSensor => {
+                        let cs = AsyncColorSensor::new_async().await?; // Assumes device is set
+                        if representative_module_for_device.is_none() { // Prefer ColorSensor if Skeleton not chosen
+                            representative_module_for_device = Some(WaitableModuleFFIVariant::ColorSensor(cs.get_ffi_ptr_clone()));
+                        }
+                        ad_context.color_sensor = Some(cs);
+                    }
                     ModuleType::HandTracker => {
                         let ht = AsyncHandTracker::new_async().await?; // Assumes device is set
                         if representative_module_for_device.is_none() { // Prefer HandTracker if Skeleton not chosen

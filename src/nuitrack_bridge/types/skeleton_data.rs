@@ -11,13 +11,13 @@ pub mod ffi {
         include!("nuitrack_bridge/types/skeleton_data.h");
         
         #[cxx_name = "getNumSkeletons"]
-        pub fn get_num_skeletons(skeleton_frame: &SkeletonData) -> Result<i32>;
+        pub fn num_skeletons(skeleton_frame: &SkeletonData) -> Result<i32>;
 
         #[cxx_name = "getSkeletons"]
-        pub fn get_skeletons(skeleton_frame: &SkeletonData) -> Result<UniquePtr<CxxVector<Skeleton>>>;
+        pub fn skeletons(skeleton_frame: &SkeletonData) -> Result<UniquePtr<CxxVector<Skeleton>>>;
 
         #[cxx_name = "getTimestamp"]
-        pub fn get_timestamp(skeleton_frame: &SkeletonData) -> Result<u64>;
+        pub fn timestamp(skeleton_frame: &SkeletonData) -> Result<u64>;
 
         #[cxx_name = "doNotUseMakeSharedPtrAware"]
         fn do_not_use_make_shared_ptr_aware(data: &SharedPtr<SkeletonData>);

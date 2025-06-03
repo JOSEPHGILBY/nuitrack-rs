@@ -1,5 +1,4 @@
 #include "nuitrack_bridge/types/hand.h"
-#include "nuitrack/types/Hand.h" 
 
 namespace nuitrack_bridge::hand {
 
@@ -13,8 +12,8 @@ namespace nuitrack_bridge::hand {
     bool getHandClick(const Hand& hand) {
         return hand.click;
     }
-    int getHandPressure(const Hand& hand) {
-        return hand.pressure;
+    int32_t getHandPressure(const Hand& hand) {
+        return static_cast<int32_t>(hand.pressure);
     }
     float getHandXReal(const Hand& hand) {
         return hand.xReal;
@@ -38,13 +37,4 @@ namespace nuitrack_bridge::hand {
     std::shared_ptr<Hand> getUserHandsRightHand(const UserHands& userHands) {
         return userHands.rightHand;
     }
-    
-    void doNotUseMakeUserHandsVectorElementAware(const std::vector<UserHands>& /*vec*/) {
-        // No-op
-    }
-
-    void doNotUseMakeHandSharedPtrAware(const std::shared_ptr<Hand>& /*handPtr*/) {
-        // No-op
-    }
-
 } 

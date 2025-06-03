@@ -20,7 +20,4 @@ namespace nuitrack_bridge::hand_data {
     uint64_t getTimestamp(const HandData& data);
     int32_t getNumUsers(const HandData& data);
     std::unique_ptr<std::vector<UserHands>> getUsersHands(const HandData& data);
-
-    void doNotUseMakeHandTrackerDataSharedPtrAware(const std::shared_ptr<HandData>& data);
-
 }

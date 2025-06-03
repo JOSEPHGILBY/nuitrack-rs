@@ -2,7 +2,7 @@
 
 namespace nuitrack_bridge::skeleton {
 
-    int32_t getUserId(const Skeleton& skeleton) {
+    int32_t getUserID(const Skeleton& skeleton) {
         return static_cast<int32_t>(skeleton.id);
     }
 
@@ -52,12 +52,6 @@ namespace nuitrack_bridge::skeleton {
             matrix_vec->push_back(joint.orient.matrix[i]);
         }
         return matrix_vec;
-    }
-
-    void doNotUseMakeVectorElementAware(const std::vector<Skeleton>& data) {
-        // This function can be a no-op if it's just for CXX's type system.
-        // Or it could do some light validation or logging if desired.
-        (void)data; // Suppress unused parameter warning if it's a no-op
     }
 
 }
