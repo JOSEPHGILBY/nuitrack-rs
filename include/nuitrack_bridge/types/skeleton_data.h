@@ -19,7 +19,4 @@ namespace nuitrack_bridge::skeleton_data {
     uint64_t getTimestamp(const SkeletonData& frame);
 
     std::unique_ptr<std::vector<Skeleton>> getSkeletons(const SkeletonData& frame);
-
-    void doNotUseMakeSharedPtrAware(const std::shared_ptr<SkeletonData>& data);
-
 }

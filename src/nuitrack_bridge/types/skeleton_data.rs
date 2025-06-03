@@ -7,6 +7,8 @@ pub mod ffi {
         type Skeleton = crate::nuitrack_bridge::types::skeleton::ffi::Skeleton;
     }
 
+    impl SharedPtr<SkeletonData> {}
+
     unsafe extern "C++" {
         include!("nuitrack_bridge/types/skeleton_data.h");
         
@@ -19,8 +21,6 @@ pub mod ffi {
         #[cxx_name = "getTimestamp"]
         pub fn timestamp(skeleton_frame: &SkeletonData) -> Result<u64>;
 
-        #[cxx_name = "doNotUseMakeSharedPtrAware"]
-        fn do_not_use_make_shared_ptr_aware(data: &SharedPtr<SkeletonData>);
     }
 }
 

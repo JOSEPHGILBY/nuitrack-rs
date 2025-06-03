@@ -1,5 +1,5 @@
 use cxx::SharedPtr;
-use crate::{nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult}, nuitrack_bridge::types::rgb_frame::ffi::{self as rgb_frame_ffi, Color3}};
+use crate::{nuitrack::shared_types::error::Result as NuitrackResult, nuitrack_bridge::types::rgb_frame::ffi::{self as rgb_frame_ffi, Color3}};
 
 
 pub struct RGBFrame {

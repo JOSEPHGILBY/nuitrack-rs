@@ -15,9 +15,4 @@ namespace nuitrack_bridge::skeleton_data {
         return frame.getTimestamp();
     }
 
-    void doNotUseMakeSharedPtrAware(const std::shared_ptr<SkeletonData>& data) {
-        // This function can be a no-op if it's just for CXX's type system.
-        // Or it could do some light validation or logging if desired.
-        (void)data; // Suppress unused parameter warning if it's a no-op
-    }
 }

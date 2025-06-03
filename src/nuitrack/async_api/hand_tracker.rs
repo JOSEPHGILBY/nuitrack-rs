@@ -2,7 +2,7 @@
 
 // Imports for the macro and the public API
 use crate::nuitrack_bridge::modules::hand_tracker::ffi as ht_ffi;
-use crate::nuitrack_bridge::types::hand_data::ffi as hand_data_ffi; // For FFI HandData type
+ // For FFI HandData type
 use crate::nuitrack::shared_types::hand_frame::HandFrame; // Public Rust HandFrame type
 
 // The generate_async_tracker! macro definition is assumed to be in scope

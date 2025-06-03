@@ -1,10 +1,9 @@
 // In src/nuitrack/mod.rs or a new session_config.rs
 
 use cxx::SharedPtr;
-use std::path::Path;
 use crate::nuitrack_bridge::device::ffi::Device as FFIDevice;
 
-use super::error::NuitrackError; // Assuming error module is at super::error
+ // Assuming error module is at super::error
 
 // --- For Device Discovery ---
 #[derive(Clone)]

@@ -1,13 +1,9 @@
 // File: src/nuitrack/session_builder.rs
 use std::path::Path;
-use std::sync::Arc;
 use cxx::SharedPtr;
 
-#[cfg(feature = "tokio_runtime")]
-use tokio_util::sync::CancellationToken;
-
 use crate::nuitrack::async_api::color_sensor::AsyncColorSensor;
-use crate::nuitrack_bridge::{core::ffi as core_ffi, device::ffi as device_ffi};
+use crate::nuitrack_bridge::device::ffi as device_ffi;
 use super::async_dispatch::run_blocking;
 use super::skeleton_tracker::AsyncSkeletonTracker;
 use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};

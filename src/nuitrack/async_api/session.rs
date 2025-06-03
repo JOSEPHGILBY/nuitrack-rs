@@ -265,8 +265,8 @@ impl NuitrackSession {
             let mut waited = false;
             if let Some(st_wrapper) = &device_ctx.skeleton_tracker { // Prioritize skeleton
                 let ptr_clone = st_wrapper.get_ffi_ptr_clone();
-                // run_blocking(move || core_ffi::nuitrack_wait_update_skeleton_tracker(&ptr_clone)
-                //     .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e)))).await?;
+                run_blocking(move || core_ffi::wait_update_skeleton_tracker(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e)))).await?;
                 waited = true;
             } else if let Some(ht_wrapper) = &device_ctx.hand_tracker {
                 let ptr_clone = ht_wrapper.get_ffi_ptr_clone();
