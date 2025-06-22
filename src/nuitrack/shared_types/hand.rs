@@ -1,7 +1,6 @@
-use cxx::SharedPtr; // For interacting with SharedPtr<Hand> from FFI
+ // For interacting with SharedPtr<Hand> from FFI
 use tracing::instrument;
 use crate::nuitrack_bridge::types::hand::ffi::{self as hand_ffi}; // Corrected path
-use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};
 
 pub use crate::nuitrack_bridge::types::hand::ffi::Hand;
 

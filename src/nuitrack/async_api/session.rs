@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(feature = "tokio_runtime")] // Arc is from std, but used with Tokio types here for clarity
 use std::sync::Arc;
 
-use tracing::{debug, error, info, trace, info_span, instrument, trace_span, warn, Instrument};
+use tracing::{debug, error, info, trace, info_span, instrument, trace_span, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 

@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 use tracing::{debug, instrument, trace, trace_span, warn};
-use cxx::{SharedPtr, UniquePtr, CxxVector};
+use cxx::SharedPtr;
 use crate::nuitrack_bridge::types::hand_data::ffi as hand_data_ffi;
 
 // Import the public Rust UserHands type we defined earlier

@@ -1,7 +1,5 @@
 use tracing::instrument;
 use crate::nuitrack_bridge::types::skeleton::ffi::{self as skeleton_ffi, Joint};
-use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};
-use cxx::{UniquePtr, CxxVector};
 
 pub use crate::nuitrack_bridge::types::skeleton::ffi::JointType;
 
