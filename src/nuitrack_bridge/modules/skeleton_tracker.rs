@@ -17,39 +17,39 @@ pub mod ffi {
         pub fn create_skeleton_tracker() -> Result<SharedPtr<SkeletonTracker>>;
 
         #[cxx_name = "connectOnUpdateForAsync"]
-        pub unsafe fn connect_on_update_for_async(
+        pub unsafe fn connect_on_skeleton_frame_async(
             tracker: &SharedPtr<SkeletonTracker>,
             skeleton_frame_sender: *mut c_void, 
         ) -> Result<u64>;
 
         #[cxx_name = "disconnectOnUpdate"]
-        pub fn disconnect_on_update(
+        pub fn disconnect_on_skeleton_frame(
             tracker: &SharedPtr<SkeletonTracker>,
             handler_id: u64,
         ) -> Result<()>;
 
         // --- New User Callbacks ---
         #[cxx_name = "connectOnNewUserForAsync"]
-        pub unsafe fn connect_on_new_user_for_async(
+        pub unsafe fn connect_on_new_user_event_async(
             tracker: &SharedPtr<SkeletonTracker>,
             new_user_frame_sender: *mut c_void,
         ) -> Result<u64>;
 
         #[cxx_name = "disconnectOnNewUser"]
-        pub fn disconnect_on_new_user(
+        pub fn disconnect_on_new_user_event(
             tracker: &SharedPtr<SkeletonTracker>,
             handler_id: u64,
         ) -> Result<()>;
 
         // --- Lost User Callbacks ---
         #[cxx_name = "connectOnLostUserForAsync"]
-        pub unsafe fn connect_on_lost_user_for_async(
+        pub unsafe fn connect_on_lost_user_event_async(
             tracker: &SharedPtr<SkeletonTracker>,
             lost_user_frame_sender: *mut c_void,
         ) -> Result<u64>;
 
         #[cxx_name = "disconnectOnLostUser"]
-        pub fn disconnect_on_lost_user(
+        pub fn disconnect_on_lost_user_event(
             tracker: &SharedPtr<SkeletonTracker>,
             handler_id: u64,
         ) -> Result<()>;
@@ -75,14 +75,14 @@ pub mod ffi {
         
         // --- Synchronous Data Access ---
         #[cxx_name = "getSkeletons"]
-        pub fn get_skeletons(tracker: &SharedPtr<SkeletonTracker>) -> Result<SharedPtr<SkeletonData>>;
+        pub fn skeletons(tracker: &SharedPtr<SkeletonTracker>) -> Result<SharedPtr<SkeletonData>>;
 
         // --- Module Information ---
         #[cxx_name = "getProcessingTime"]
-        pub fn get_processing_time(tracker: &SharedPtr<SkeletonTracker>) -> Result<f32>;
+        pub fn processing_time(tracker: &SharedPtr<SkeletonTracker>) -> Result<f32>;
 
         #[cxx_name = "getTrackerTimestamp"]
-        pub fn get_tracker_timestamp(tracker: &SharedPtr<SkeletonTracker>) -> Result<u64>;
+        pub fn tracker_timestamp(tracker: &SharedPtr<SkeletonTracker>) -> Result<u64>;
 
         #[cxx_name = "canUpdate"]
         pub fn can_update(tracker: &SharedPtr<SkeletonTracker>) -> Result<bool>;

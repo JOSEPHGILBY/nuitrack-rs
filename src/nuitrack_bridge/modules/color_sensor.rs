@@ -24,13 +24,13 @@ pub mod ffi {
         pub fn create_color_sensor() -> Result<SharedPtr<ColorSensor>>;
 
         #[cxx_name = "connectOnNewFrameForAsync"]
-        pub unsafe fn connect_on_new_frame_for_async(
+        pub unsafe fn connect_on_rgb_frame_async(
             sensor: &SharedPtr<ColorSensor>,
             rgb_frame_sender: *mut c_void, // Opaque pointer to Rust sender
         ) -> Result<u64>;
 
         #[cxx_name = "disconnectOnNewFrame"]
-        pub fn disconnect_on_new_frame(
+        pub fn disconnect_on_rgb_frame(
             sensor: &SharedPtr<ColorSensor>,
             handler_id: u64,
         ) -> Result<()>;

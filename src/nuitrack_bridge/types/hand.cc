@@ -1,28 +1,17 @@
 #include "nuitrack_bridge/types/hand.h"
+#include "nuitrack-rs/src/nuitrack_bridge/types/hand.rs.h"
 
 namespace nuitrack_bridge::hand {
 
-    // --- Hand functions ---
-    float getHandX(const Hand& hand) {
-        return hand.x;
-    }
-    float getHandY(const Hand& hand) {
-        return hand.y;
-    }
-    bool getHandClick(const Hand& hand) {
-        return hand.click;
-    }
-    int32_t getHandPressure(const Hand& hand) {
-        return static_cast<int32_t>(hand.pressure);
-    }
-    float getHandXReal(const Hand& hand) {
-        return hand.xReal;
-    }
-    float getHandYReal(const Hand& hand) {
-        return hand.yReal;
-    }
-    float getHandZReal(const Hand& hand) {
-        return hand.zReal;
+
+    std::shared_ptr<Hand> alias_hand_ptr(const std::shared_ptr<NuitrackHand>& sdk_hand_ptr) {
+        if (!sdk_hand_ptr) {
+            return nullptr;
+        }
+
+        NuitrackHand* raw_sdk_ptr = sdk_hand_ptr.get();
+        Hand* casted_ptr = reinterpret_cast<Hand*>(raw_sdk_ptr);
+        return std::shared_ptr<Hand>(sdk_hand_ptr, casted_ptr);
     }
 
     // --- UserHands functions ---
@@ -31,10 +20,10 @@ namespace nuitrack_bridge::hand {
     }
 
     std::shared_ptr<Hand> getUserHandsLeftHand(const UserHands& userHands) {
-        return userHands.leftHand;
+        return alias_hand_ptr(userHands.leftHand);
     }
 
     std::shared_ptr<Hand> getUserHandsRightHand(const UserHands& userHands) {
-        return userHands.rightHand;
+        return alias_hand_ptr(userHands.rightHand);
     }
 } 

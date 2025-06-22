@@ -57,6 +57,29 @@ pub mod ffi {
         RightFoot = 24,      // Right foot (not used in the current version by Nuitrack).
     }
 
+    #[derive(Debug, Clone, Copy)]
+    pub struct Vector3 {
+        pub x: f32,
+        pub y: f32,
+        pub z: f32,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct Orientation {
+        pub matrix: [f32; 9],
+    }
+
+    #[derive(Debug, Clone, Copy)] 
+    pub struct Joint {
+        pub joint_type: JointType,
+        pub confidence: f32,
+        pub real: Vector3,
+        pub proj: Vector3,
+        pub orient: Orientation
+
+    }
+
+
     #[namespace = "tdv::nuitrack"]
     unsafe extern "C++" {
         type Skeleton;
@@ -67,37 +90,11 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("nuitrack_bridge/types/skeleton.h");
 
-        type JointType;
-        type Joint;
-
         #[cxx_name = "getUserID"]
         pub fn user_id(skeleton: &Skeleton) -> i32;
-
+        
         #[cxx_name = "getJoints"]
-        pub fn joints(skeleton: &Skeleton) -> Result<UniquePtr<CxxVector<Joint>>>;
-
-        #[cxx_name = "getJointType"]
-        pub fn joint_type(joint: &Joint) -> JointType;
-
-        #[cxx_name = "getJointConfidence"]
-        pub fn joint_confidence(joint: &Joint) -> f32;
-
-        #[cxx_name = "getJointRealX"]
-        pub fn joint_real_x(joint: &Joint) -> f32;
-        #[cxx_name = "getJointRealY"]
-        pub fn joint_real_y(joint: &Joint) -> f32;
-        #[cxx_name = "getJointRealZ"]
-        pub fn joint_real_z(joint: &Joint) -> f32;
-
-        #[cxx_name = "getJointProjX"]
-        pub fn joint_proj_x(joint: &Joint) -> f32;
-        #[cxx_name = "getJointProjY"]
-        pub fn joint_proj_y(joint: &Joint) -> f32;
-        #[cxx_name = "getJointProjZ"]
-        pub fn joint_proj_z(joint: &Joint) -> f32;
-
-        #[cxx_name = "getJointOrientationMatrix"]
-        pub fn joint_orientation_matrix(joint: &Joint) -> Result<UniquePtr<CxxVector<f32>>>;
+        pub fn joints<'a>(skeleton: &'a Skeleton) -> &'a [Joint];
 
     }
 }

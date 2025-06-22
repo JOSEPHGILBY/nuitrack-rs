@@ -25,10 +25,10 @@ pub mod ffi {
         fn unwrap_shared_ptr_device(spd: &SharedPtrDevice) -> SharedPtr<Device>;
 
         #[cxx_name = "getDevices"]
-        fn get_devices() -> Result<UniquePtr<CxxVector<SharedPtrDevice>>>;
+        fn devices() -> Result<UniquePtr<CxxVector<SharedPtrDevice>>>;
 
         #[cxx_name = "getDeviceInfo"]
-        fn get_device_info(device: &SharedPtr<Device>, info_type: DeviceInfoType) -> Result<String>;
+        fn device_info(device: &SharedPtr<Device>, info_type: DeviceInfoType) -> Result<String>;
 
         #[cxx_name = "setDevice"]
         fn set_device(device: &SharedPtr<Device>) -> Result<()>;

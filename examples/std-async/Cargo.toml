@@ -1,0 +1,17 @@
+[package]
+name = "std-async"
+version = "0.0.1"
+edition = "2021" # Or your preferred edition
+publish = false
+
+[dependencies]
+# Depend on the main library, but WITHOUT the tokio_runtime feature
+nuitrack-rs = { path = "../..", default-features = false }
+
+# Add the dependencies needed for this specific example
+anyhow = "1.0"
+futures = "0.3" # We'll use this for the runtime-agnostic select! macro
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# Add our chosen async runtime
+async-std = { version = "1.12", features = ["attributes"] }

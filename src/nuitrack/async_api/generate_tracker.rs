@@ -1,52 +1,161 @@
 
+
 macro_rules! generate_async_tracker {
-    (
-        // Meta-info for the main tracker struct
+    // ========================================================================================
+    // Rule 1: PUBLIC ENTRY POINT - CORRECTED
+    // ========================================================================================
+    {
+        base_module_name_snake: $base_module_name_snake:ident,
+        module_ffi_path: $module_ffi_path:path,
+        streams: [ $($stream_tokens:tt)* ]
+    } => {
+        use paste::paste;
+        paste! {
+            generate_async_tracker! {
+                @process_streams
+                base_module_name_snake: $base_module_name_snake,
+                module_ffi_path: $module_ffi_path,
+                tracker_name: [< Async $base_module_name_snake:camel >],
+                ffi_tracker_type: $module_ffi_path::[< $base_module_name_snake:camel >],
+                c_void_type: $module_ffi_path::c_void,
+                ffi_create_function: $module_ffi_path::[< create_ $base_module_name_snake >],
+                module_creation_error_context: concat!(stringify!([< $base_module_name_snake:camel >]), " FFI create"),
+                processed_streams: [],
+                remaining_streams: [ $($stream_tokens)* ]
+            }
+        }
+    };
+
+    // ========================================================================================
+    // Rule 2: RECURSIVE STEP (OVERRIDE CASE) - MOST SPECIFIC, MUST BE FIRST
+    // ========================================================================================
+    {
+        @process_streams
+        base_module_name_snake: $base_module_name_snake:ident,
+        module_ffi_path: $module_ffi_path:path,
         tracker_name: $tracker_name:ident,
-        ffi_tracker_type: $ffi_tracker_type:path, // e.g., crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker
-        c_void_type: $c_void_type:path,         // e.g., crate::nuitrack_bridge::modules::skeleton_tracker::ffi::c_void
-        
-        // Info for the new_async constructor
+        ffi_tracker_type: $ffi_tracker_type:path,
+        c_void_type: $c_void_type:path,
         ffi_create_function: $ffi_create_function:path,
         module_creation_error_context: $module_creation_error_context:expr,
-
-        // Array of stream configurations
-        streams: [
-            $( // Repeat for each stream configuration provided
-                {
-                    // --- Names specific to this stream ---
-                    // Rust struct name for the stream itself (e.g., SkeletonFrameStream)
-                    stream_struct_name: $stream_struct_name:ident, 
-                    // Public Rust method name on the tracker to get this stream (e.g., skeleton_frames_stream)
-                    stream_method_name: $stream_method_name:ident, 
-                    // Internal type alias name for this stream's MPSC sender (e.g., SkeletonFrameSender)
-                    sender_type_alias: $sender_type_alias:ident,     
-                    // Field name in tracker struct for the callback handler ID (e.g., on_update_handler_id)
-                    handler_id_field: $handler_id_field:ident,     
-                    // Field name in tracker struct for the raw sender pointer (e.g., raw_skeleton_frame_sender)
-                    raw_sender_field: $raw_sender_field:ident,     
-
-                    // --- Types for this stream ---
-                    // The final Rust item type yielded by the stream (e.g., crate::nuitrack::shared_types::skeleton_frame::SkeletonFrame)
-                    rust_item_type: $rust_item_type:ty,            
-
-                    // --- FFI connect/disconnect functions for this stream's callback ---
-                    ffi_connect_stream_fn: $ffi_connect_stream_fn:path,
-                    ffi_disconnect_stream_fn: $ffi_disconnect_stream_fn:path,
-
-                    // --- Dispatcher function (extern "C" Rust function called by C++) ---
-                    dispatcher_name: $dispatcher_name:ident,
-                    // Dispatcher kind and its specific arguments
-                    // This uses a tt muncher or specific @rule to parse one of two structures:
-                    // dispatcher_kind: FfiData { ffi_arg_name: data, ffi_arg_type: cxx::SharedPtr<...>, user_data_arg: sender, conversion: |d| Struct::new(d), err_msg: "..." }
-                    // dispatcher_kind: DirectItem { item_arg_name: id, item_arg_type: i32, user_data_arg: sender }
-                    dispatcher_kind: { $($dispatcher_kind_token:tt)+ }
-                }
-            ),* $(,)? // Allow trailing comma
+        processed_streams: [ $($processed:tt),* ],
+        remaining_streams: [
+            {
+                item_base_name_snake: $item_base_name_snake:ident,
+                item_base_name_pascal: $item_base_name_pascal:ident,
+                rust_item_type: $rust_item_type:ty,
+                dispatcher_kind: { $($dispatcher_kind_token:tt)+ }
+            }
+            $(, $($remaining_tokens:tt)+ )?
         ]
-    ) => {
-        // Use fully qualified paths for external crates inside the macro expansion
-        use cxx::SharedPtr; // Assuming this is generally needed for ffi_tracker_type
+    } => {
+        paste! {
+            generate_async_tracker! {
+                @process_streams
+                base_module_name_snake: $base_module_name_snake,
+                module_ffi_path: $module_ffi_path,
+                tracker_name: $tracker_name,
+                ffi_tracker_type: $ffi_tracker_type,
+                c_void_type: $c_void_type,
+                ffi_create_function: $ffi_create_function,
+                module_creation_error_context: $module_creation_error_context,
+                processed_streams: [
+                    $($processed,)*
+                    {
+                        stream_struct_name: [< $item_base_name_pascal Stream >],
+                        stream_method_name: [< $item_base_name_snake s_stream >],
+                        sender_type_alias: [< $item_base_name_pascal Sender >],
+                        handler_id_field: [< id_for_on_ $item_base_name_snake _handler >],
+                        raw_sender_field: [< raw_ $item_base_name_snake _sender >],
+                        rust_item_type: $rust_item_type,
+                        ffi_connect_stream_fn: $module_ffi_path::[< connect_on_ $item_base_name_snake _async >],
+                        ffi_disconnect_stream_fn: $module_ffi_path::[< disconnect_on_ $item_base_name_snake >],
+                        dispatcher_name: [< rust_ $base_module_name_snake _ $item_base_name_snake _dispatcher_async >],
+                        dispatcher_kind: { $($dispatcher_kind_token)+ }
+                    }
+                ],
+                remaining_streams: [ $($($remaining_tokens)+)? ]
+            }
+        }
+    };
+
+    // ========================================================================================
+    // Rule 3: RECURSIVE STEP (DEFAULT CASE) - MORE GENERAL, MUST BE SECOND
+    // ========================================================================================
+    {
+        @process_streams
+        base_module_name_snake: $base_module_name_snake:ident,
+        module_ffi_path: $module_ffi_path:path,
+        tracker_name: $tracker_name:ident,
+        ffi_tracker_type: $ffi_tracker_type:path,
+        c_void_type: $c_void_type:path,
+        ffi_create_function: $ffi_create_function:path,
+        module_creation_error_context: $module_creation_error_context:expr,
+        processed_streams: [ $($processed:tt),* ],
+        remaining_streams: [
+            {
+                item_base_name_snake: $item_base_name_snake:ident,
+                rust_item_type: $rust_item_type:ty,
+                dispatcher_kind: { $($dispatcher_kind_token:tt)+ }
+            }
+            $(, $($remaining_tokens:tt)+ )?
+        ]
+    } => {
+        paste! {
+            generate_async_tracker! {
+                @process_streams
+                base_module_name_snake: $base_module_name_snake,
+                module_ffi_path: $module_ffi_path,
+                tracker_name: $tracker_name,
+                ffi_tracker_type: $ffi_tracker_type,
+                c_void_type: $c_void_type,
+                ffi_create_function: $ffi_create_function,
+                module_creation_error_context: $module_creation_error_context,
+                processed_streams: [ $($processed),* ],
+                remaining_streams: [
+                    {
+                        item_base_name_snake: $item_base_name_snake,
+                        item_base_name_pascal: [< $item_base_name_snake:camel >],
+                        rust_item_type: $rust_item_type,
+                        dispatcher_kind: { $($dispatcher_kind_token)+ }
+                    }
+                    $(, $($remaining_tokens)+ )?
+                ]
+            }
+        }
+    };
+
+    // ========================================================================================
+    // Rule 4: RECURSION BASE CASE & FINAL IMPLEMENTATION
+    // ========================================================================================
+    {
+        @process_streams
+        base_module_name_snake: $base_module_name_snake:ident,
+        module_ffi_path: $module_ffi_path:path,
+        tracker_name: $tracker_name:ident,
+        ffi_tracker_type: $ffi_tracker_type:path,
+        c_void_type: $c_void_type:path,
+        ffi_create_function: $ffi_create_function:path,
+        module_creation_error_context: $module_creation_error_context:expr,
+        processed_streams: [
+            $({
+                stream_struct_name: $stream_struct_name:ident,
+                stream_method_name: $stream_method_name:ident,
+                sender_type_alias: $sender_type_alias:ident,
+                handler_id_field: $handler_id_field:ident,
+                raw_sender_field: $raw_sender_field:ident,
+                rust_item_type: $rust_item_type:ty,
+                ffi_connect_stream_fn: $ffi_connect_stream_fn:path,
+                ffi_disconnect_stream_fn: $ffi_disconnect_stream_fn:path,
+                dispatcher_name: $dispatcher_name:ident,
+                dispatcher_kind: { $($dispatcher_kind_token:tt)+ }
+            }),*
+        ],
+        // Match an empty list to terminate recursion
+        remaining_streams: []
+    } => {
+        // ... The entire implementation block is unchanged ...
+        use cxx::SharedPtr;
         use futures_core::Stream;
         use futures_channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
         use pin_project_lite::pin_project;
@@ -54,13 +163,11 @@ macro_rules! generate_async_tracker {
         use std::task::{Context, Poll};
         use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};
         use super::async_dispatch::run_blocking;
+        use tracing::{debug, error, instrument, trace_span};
 
-        // Part 1: Generate Sender Aliases, Stream Structs, Impl Stream, Dispatchers for EACH stream
         $(
-            // Type alias for this specific stream's sender
             type $sender_type_alias = UnboundedSender<NuitrackResult<$rust_item_type>>;
 
-            //The Stream struct definition
             pin_project! {
                 pub struct $stream_struct_name {
                     #[pin]
@@ -68,26 +175,22 @@ macro_rules! generate_async_tracker {
                 }
             }
 
-            //The impl Stream for the struct
             impl Stream for $stream_struct_name {
                 type Item = NuitrackResult<$rust_item_type>;
-
                 fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
                     self.project().rx.poll_next(cx)
                 }
             }
             
-            // Call internal macro rule to generate the specific dispatcher based on dispatcher_kind
             generate_async_tracker!(@generate_dispatcher
                 $dispatcher_name,
                 $sender_type_alias,
                 $rust_item_type,
-                $c_void_type, // Path to the FFI c_void (e.g., some_ffi_module::c_void or std::ffi::c_void if using that)
-                { $($dispatcher_kind_token)+ } // Pass the dispatcher_kind block
+                $c_void_type,
+                { $($dispatcher_kind_token)+ }
             );
         )*
 
-        // Part 2: Generate the main Async Tracker Struct
         pub struct $tracker_name {
             ptr: SharedPtr<$ffi_tracker_type>,
             $(
@@ -99,22 +202,21 @@ macro_rules! generate_async_tracker {
         unsafe impl Send for $tracker_name {}
         unsafe impl Sync for $tracker_name {}
 
-        // Part 3: Implement core methods for the Tracker Struct
         impl $tracker_name {
-            pub(crate) async fn new_async() -> NuitrackResult<Self> {
-                let tracker_ptr = run_blocking( || {
-                    $ffi_create_function()
-                        .map_err(|e| NuitrackError::ModuleCreationFailed(
-                            format!("{}: {}", $module_creation_error_context, e))
-                        )
-                }).await?;
 
+            #[instrument]
+            pub(crate) async fn new_async() -> NuitrackResult<Self> {
+                let tracker_ptr = trace_span!("ffi", function=stringify!($ffi_create_function)).in_scope(|| {
+                    run_blocking( || {
+                        $ffi_create_function()
+                            .map_err(|e| NuitrackError::ModuleCreationFailed(
+                                format!("{}: {}", $module_creation_error_context, e))
+                            )
+                    })
+                }).await?;
                 Ok(Self {
                     ptr: tracker_ptr,
-                    $(
-                        $handler_id_field: None,
-                        $raw_sender_field: None,
-                    )*
+                    $($handler_id_field: None, $raw_sender_field: None,)*
                 })
             }
 
@@ -122,8 +224,8 @@ macro_rules! generate_async_tracker {
                 self.ptr.clone()
             }
 
-            // Generate stream-creating methods
             $(
+                #[instrument(skip(self), name = "get_stream")]
                 pub fn $stream_method_name(&mut self) -> NuitrackResult<$stream_struct_name> {
                     if self.$handler_id_field.is_some() {
                         return Err(NuitrackError::OperationFailed(
@@ -132,7 +234,7 @@ macro_rules! generate_async_tracker {
                     }
                     let (tx, rx) = unbounded::<NuitrackResult<$rust_item_type>>();
                     
-                    let sender_boxed = Box::new(tx); // tx is of type $sender_type_alias
+                    let sender_boxed = Box::new(tx);
                     let sender_raw_ptr = Box::into_raw(sender_boxed) as *mut $c_void_type;
                     self.$raw_sender_field = Some(sender_raw_ptr);
 
@@ -147,20 +249,17 @@ macro_rules! generate_async_tracker {
             )*
         }
 
-        // // Part 4: Implement Drop for the Tracker Struct
         impl Drop for $tracker_name {
             fn drop(&mut self) {
+                debug!(tracker = stringify!($tracker_name), "Dropping tracker and disconnecting streams.");
                 $(
                     if let Some(handler_id) = self.$handler_id_field.take() {
-                        // Note: FFI disconnect functions might not be fallible in the Result<...> sense from Rust,
-                        // but C++ exceptions could occur. If they return Result<(), cxx::Exception>, this is fine.
-                        // If they are void and can't fail FFI-wise, the unwrap_or_else is for logging.
                         if let Err(e) = $ffi_disconnect_stream_fn(&self.ptr, handler_id) {
-                            eprintln!(
-                                "[{}] Error in FFI disconnect {} during Drop: {}",
-                                stringify!($tracker_name),
-                                stringify!($ffi_disconnect_stream_fn),
-                                e
+                            error!(
+                                tracker = stringify!([< Async $base_module_name_snake:camel >]),
+                                ffi_fn = stringify!($ffi_disconnect_stream_fn),
+                                error = %e,
+                                "Error in FFI disconnect during Drop"
                             );
                         }
                     }
@@ -172,75 +271,45 @@ macro_rules! generate_async_tracker {
         }
     };
 
-    // --- Internal Rule for FFIDataConversion Dispatcher ---
-    (@generate_dispatcher
-        $dispatcher_name:ident,
-        $sender_type_alias:ident,
-        $rust_item_type:ty,
-        $c_void_type:ty,
-        { FfiDataConversion { // Matcher for this dispatcher kind
-            ffi_arg_name: $ffi_arg_name:ident,
-            ffi_arg_type: $ffi_arg_type:ty,
-            user_data_arg_name: $user_data_arg_name:ident,
-            conversion_logic: $conversion_logic:expr, // Expects a closure: |T| -> Option<U> or Result<U,E>
-            conversion_error_msg: $conversion_error_msg:expr $(,)?
-        }}
+    // ========================================================================================
+    // Rule 5 & 6: DISPATCHER GENERATION (Unchanged)
+    // ========================================================================================
+    (@generate_dispatcher $dispatcher_name:ident, $sender_type_alias:ident, $rust_item_type:ty, $c_void_type:ty,
+        { FFIDataConversion { ffi_arg_name: $ffi_arg_name:ident, ffi_arg_type: $ffi_arg_type:ty, conversion_logic: $conversion_logic:expr $(,)? }}
     ) => {
+        #[instrument(name="ffi_callback", skip_all, fields(dispatcher.name = stringify!($dispatcher_name)))]
         #[unsafe(no_mangle)]
-        pub extern "C" fn $dispatcher_name(
-            $ffi_arg_name: &$ffi_arg_type,
-            $user_data_arg_name: *mut $c_void_type,
-        ) {
-            if $user_data_arg_name.is_null() {
-                eprintln!(concat!(stringify!($dispatcher_name), ": user_data argument '", stringify!($user_data_arg_name), "' is null."));
-                return;
+        pub extern "C" fn $dispatcher_name($ffi_arg_name: &$ffi_arg_type, raw_sender_ptr: *mut $c_void_type,) {
+            if raw_sender_ptr.is_null() { 
+                error!(dispatcher = stringify!($dispatcher_name), "raw_sender_ptr argument is null.");
+                return; 
             }
-            let tx = unsafe { &*($user_data_arg_name as *const $sender_type_alias) };
-            
+            let tx = unsafe { &*(raw_sender_ptr as *const $sender_type_alias) };
             let conversion_closure = $conversion_logic;
-            // Assuming the closure returns Option<ItemType> as per prior examples
             let result_to_send = match conversion_closure($ffi_arg_name) {
                 Some(converted_item) => Ok(converted_item),
-                None => Err(NuitrackError::OperationFailed(
-                    $conversion_error_msg.to_string()
-                )),
+                None => Err(NuitrackError::OperationFailed(concat!("FFI data for ", stringify!($sender_type_alias), " was null or invalid").to_string())),
             };
-            // If your conversion_logic returns Result<ItemType, YourErrorType>, you'd adjust:
-            // let result_to_send = conversion_closure(data_arg).map_err(|conv_err| ... map to NuitrackError ...);
-
-            if tx.unbounded_send(result_to_send).is_err() {
-                // Optional: eprintln for receiver dropped
+            if tx.unbounded_send(result_to_send).is_err() { 
+                debug!(dispatcher = stringify!($dispatcher_name), "Stream receiver dropped.");
             }
         }
     };
-
-    // --- Internal Rule for DirectItem Dispatcher ---
-    (@generate_dispatcher
-        $dispatcher_name:ident,
-        $sender_type_alias:ident,
-        $rust_item_type:ty,
-        $c_void_type:ty,
-        { DirectItem { // Matcher for this dispatcher kind
-            ffi_item_arg_name: $ffi_item_arg_name:ident,
-            ffi_item_arg_type: $ffi_item_arg_type:ty,
-            user_data_arg_name: $user_data_arg_name:ident $(,)?
-        }}
+    (@generate_dispatcher $dispatcher_name:ident, $sender_type_alias:ident, $rust_item_type:ty, $c_void_type:ty,
+        { DirectItem { ffi_item_arg_name: $ffi_item_arg_name:ident, ffi_item_arg_type: $ffi_item_arg_type:ty $(,)? }}
     ) => {
+        #[instrument(name="ffi_callback", skip_all, fields(dispatcher.name = stringify!($dispatcher_name), item_id = ?$ffi_item_arg_name))]
         #[unsafe(no_mangle)]
-        pub extern "C" fn $dispatcher_name(
-            $ffi_item_arg_name: $ffi_item_arg_type,
-            $user_data_arg_name: *mut $c_void_type,
-        ) {
-            if $user_data_arg_name.is_null() {
-                eprintln!(concat!(stringify!($dispatcher_name), ": user_data argument '", stringify!($user_data_arg_name), "' is null."));
-                return;
+        pub extern "C" fn $dispatcher_name($ffi_item_arg_name: $ffi_item_arg_type, raw_sender_ptr: *mut $c_void_type,) {
+            if raw_sender_ptr.is_null() { 
+                error!(dispatcher = stringify!($dispatcher_name), "raw_sender_ptr argument is null."); 
+                return; 
             }
-            let tx = unsafe { &*($user_data_arg_name as *const $sender_type_alias) };
-            // Assuming $ffi_item_arg_type can be cast or is identical to $rust_item_type.
-            // For i32 -> i32, this is fine.
-            if tx.unbounded_send(Ok($ffi_item_arg_name as $rust_item_type)).is_err() {
-                // Optional: eprintln for receiver dropped
+            let tx = unsafe { &*(raw_sender_ptr as *const $sender_type_alias) };
+            if tx.unbounded_send(Ok($ffi_item_arg_name as $rust_item_type)).is_err() { 
+                debug!(dispatcher = stringify!($dispatcher_name), "Stream receiver dropped.");
             }
         }
     };
 }
+

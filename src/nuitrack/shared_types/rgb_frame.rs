@@ -1,6 +1,6 @@
 use cxx::SharedPtr;
 use crate::{nuitrack::shared_types::error::Result as NuitrackResult, nuitrack_bridge::types::rgb_frame::ffi::{self as rgb_frame_ffi, Color3}};
-
+use tracing::{instrument, trace, trace_span};
 
 pub struct RGBFrame {
     internal_ptr: SharedPtr<rgb_frame_ffi::RGBFrame>,
@@ -13,7 +13,9 @@ impl RGBFrame {
     /// This method is `pub(crate)` as it's intended for internal use when wrapping
     /// frames received from the Nuitrack SDK via FFI.
     pub(crate) fn new(ffi_ptr: SharedPtr<rgb_frame_ffi::RGBFrame>) -> Option<Self> {
-        if ffi_ptr.is_null() {
+        let is_null = ffi_ptr.is_null();
+        trace!(is_null, "Attempting to create new RGBFrame.");
+        if is_null {
             None
         } else {
             Some(RGBFrame {
@@ -26,24 +28,33 @@ impl RGBFrame {
     ///
     /// # Returns
     /// A `NuitrackResult` containing the number of rows as an `i32`.
+    #[instrument(skip(self))]
     pub fn rows(&self) -> NuitrackResult<i32> {
-        Ok(rgb_frame_ffi::rows(&self.internal_ptr)?)
+        trace_span!("ffi", function = "rgb_frame_ffi::rows").in_scope(||
+            Ok(rgb_frame_ffi::rows(&self.internal_ptr)?)
+        )
     }
 
     /// Gets the number of columns (width) of the color frame.
     ///
     /// # Returns
     /// A `NuitrackResult` containing the number of columns as an `i32`.
+    #[instrument(skip(self))]
     pub fn cols(&self) -> NuitrackResult<i32> {
-        Ok(rgb_frame_ffi::cols(&self.internal_ptr)?)
+        trace_span!("ffi", function = "rgb_frame_ffi::cols").in_scope(||
+            Ok(rgb_frame_ffi::cols(&self.internal_ptr)?)
+        )
     }
 
     /// Gets the unique ID of the color frame.
     ///
     /// # Returns
     /// A `NuitrackResult` containing the frame ID as a `u64`.
+    #[instrument(skip(self))]
     pub fn frame_id(&self) -> NuitrackResult<u64> {
-        Ok(rgb_frame_ffi::id(&self.internal_ptr)?)
+        trace_span!("ffi", function = "rgb_frame_ffi::id").in_scope(||
+            Ok(rgb_frame_ffi::id(&self.internal_ptr)?)
+        )
     }
 
     /// Gets the timestamp of the color frame, typically in microseconds.
@@ -51,8 +62,11 @@ impl RGBFrame {
     /// The exact meaning of this value can depend on the depth provider.
     /// # Returns
     /// A `NuitrackResult` containing the timestamp as a `u64`.
-    pub fn get_timestamp(&self) -> NuitrackResult<u64> {
-        Ok(rgb_frame_ffi::timestamp(&self.internal_ptr)?)
+    #[instrument(skip(self))]
+    pub fn timestamp(&self) -> NuitrackResult<u64> {
+        trace_span!("ffi", function = "rgb_frame_ffi::timestamp").in_scope(||
+            Ok(rgb_frame_ffi::timestamp(&self.internal_ptr)?)
+        )
     }
 
     /// Gets a slice representing the pixel data of the color frame.
@@ -63,8 +77,11 @@ impl RGBFrame {
     ///
     /// # Returns
     /// A `NuitrackResult` containing a slice of `Color3` pixels.
-    pub fn get_data(&self) -> NuitrackResult<&[Color3]> {
-        Ok(rgb_frame_ffi::data(&self.internal_ptr)?)
+    #[instrument(skip(self))]
+    pub fn data(&self) -> NuitrackResult<&[Color3]> {
+        trace_span!("ffi", function = "rgb_frame_ffi::data").in_scope(||
+            Ok(rgb_frame_ffi::data(&self.internal_ptr)?)
+        )
     }
 
     /// Provides access to the internal `SharedPtr` to the FFI `RGBFrame` type.

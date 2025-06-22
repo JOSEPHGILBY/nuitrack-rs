@@ -20,30 +20,30 @@ pub mod ffi {
 
         // --- Callback Management ---
         #[cxx_name = "connectOnUpdateForAsync"]
-        pub unsafe fn connect_on_update_for_async(
+        pub unsafe fn connect_on_hand_frame_async(
             tracker: &SharedPtr<HandTracker>,
             hand_frame_sender: *mut c_void,
         ) -> Result<u64>;
 
         #[cxx_name = "disconnectOnUpdate"]
-        pub fn disconnect_on_update(
+        pub fn disconnect_on_hand_frame(
             tracker: &SharedPtr<HandTracker>,
             handler_id: u64,
         ) -> Result<()>;
 
         // --- Synchronous Data Access ---
         #[cxx_name = "getData"]
-        pub fn get_data(tracker: &SharedPtr<HandTracker>) -> Result<SharedPtr<HandData>>;
+        pub fn data(tracker: &SharedPtr<HandTracker>) -> Result<SharedPtr<HandData>>;
 
         // --- Module Information ---
         #[cxx_name = "getProcessingTime"]
-        pub fn get_processing_time(tracker: &SharedPtr<HandTracker>) -> Result<f32>;
+        pub fn processing_time(tracker: &SharedPtr<HandTracker>) -> Result<f32>;
 
         #[cxx_name = "canUpdate"]
         pub fn can_update(tracker: &SharedPtr<HandTracker>) -> Result<bool>;
 
         #[cxx_name = "getTrackerTimestamp"]
-        pub fn get_tracker_timestamp(tracker: &SharedPtr<HandTracker>) -> Result<u64>;
+        pub fn tracker_timestamp(tracker: &SharedPtr<HandTracker>) -> Result<u64>;
     }
 }
 

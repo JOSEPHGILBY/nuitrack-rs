@@ -2,10 +2,6 @@
 macro_rules! setup_nuitrack_streams {
     ( $( $module_token:ident ),+ $(,)? ) => { // Match one or more tokens, with optional trailing comma
         async {
-            // Use fully qualified paths for types from the crate where this macro is defined.
-            // If this macro is in `nuitrack_rs::nuitrack::macros`, $crate would be `nuitrack_rs`.
-            // Adjust these paths based on where NuitrackSessionBuilder, ModuleType, etc., actually live
-            // relative to where this macro is exported from.
             use $crate::nuitrack::{
                 async_api::{session_builder::NuitrackSessionBuilder,
                 session::NuitrackSession}, // For the return type hint
@@ -13,13 +9,10 @@ macro_rules! setup_nuitrack_streams {
                 shared_types::error::{NuitrackError, Result as NuitrackResult},
             };
 
-            // 1. Create the Vec<ModuleType> for session initialization
             let modules_to_create = vec![
                 $( ModuleType::$module_token ),*
             ];
 
-            // 2. Create the NuitrackSession
-            // NuitrackSessionBuilder::create_session_from_single_default_device already returns NuitrackResult
             let mut session: NuitrackSession = NuitrackSessionBuilder::create_session_from_single_default_device(
                 modules_to_create
             )

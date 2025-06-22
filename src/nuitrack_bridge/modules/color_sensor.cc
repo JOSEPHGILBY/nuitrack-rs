@@ -48,7 +48,7 @@ namespace nuitrack_bridge::color_sensor {
             return sensor->connectOnNewFrame(
                 [rgbFrameSender](tdv::nuitrack::RGBFrame::Ptr frame) {
                     // CXX handles exceptions from Rust here by converting panics to rust::Error
-                    rust_color_sensor_callback_which_sends_for_async(frame, rgbFrameSender);
+                    rust_color_sensor_rgb_frame_dispatcher_async(frame, rgbFrameSender);
                 });
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(format_nuitrack_error("ColorSensor::connectOnNewFrame", e.what()));

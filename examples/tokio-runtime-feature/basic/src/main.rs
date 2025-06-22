@@ -3,21 +3,26 @@ use nuitrack_rs::{
     nuitrack::shared_types::error::NuitrackError,
     setup_nuitrack_streams
 };
+use tracing::{error, info, Level};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("Attempting to initialize Nuitrack with Tokio runtime using NuitrackSessionBuilder...");
+    tracing_subscriber::fmt()
+        .with_max_level(Level::INFO) // Set a default log level
+        .with_target(true)           // Show the module path for context
+        .init();
+    info!("Attempting to initialize Nuitrack with Tokio runtime...");
     let (mut hand_stream, mut skeleton_stream, mut color_stream, session) = setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor).await?;
 
     // 4. Start Nuitrack processing (this also starts the internal update loop if enabled)
     session.start_processing().await.map_err(|e: NuitrackError| {
-        eprintln!("Failed to start Nuitrack processing: {:?}", e);
+        error!(error = %e, "Failed to start Nuitrack processing");
         anyhow::anyhow!("Nuitrack run failed: {}", e)
     })?;
-    println!("Nuitrack processing and internal update loop started.");
+    info!("Nuitrack processing and internal update loop started.");
 
     // 5. Process frames from the stream
-    for i in 0..100 { // Let's try to get a few frames
+    for i in 0..1000 { // Let's try to get a few frames
         tokio::select! {
             biased; // Ensure cancellation/timeout is checked preferentially if multiple branches are ready
             Some(hand_frame_result) = hand_stream.next() => { 
@@ -25,10 +30,10 @@ async fn main() -> anyhow::Result<()> {
                     let hand_frame = match hand_frame_result {
                         Ok(frame) => frame,
                         Err(e) => {
-                            eprintln!("Error receiving frame data: {:?}", e);
+                            error!(error = ?e, "Error receiving hand frame data");
                             // If the error is channel disconnected, it means the sender (AsyncHandTracker) was dropped or closed.
                             if matches!(e, NuitrackError::Wrapper(ref s) if s.contains("Channel disconnected")) {
-                                println!("Hand tracker data channel disconnected, likely due to Nuitrack closing. Stopping frame processing.");
+                                error!(error = ?e,"Hand tracker data channel disconnected, likely due to Nuitrack closing. Stopping frame processing.");
                                 break 'process_frame true;
                             }
                             break 'process_frame false;
@@ -66,31 +71,53 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             Some(skeleton_frame_result) = skeleton_stream.next() => {
-                let should_break_loop = 'process_frame: {
-                    let frame = match skeleton_frame_result {
-                        Ok(frame) => frame,
-                        Err(e) => {
-                            eprintln!("Error receiving skeleton frame data: {:?}", e);
-                            // If the error is channel disconnected, it means the sender (AsyncHandTracker) was dropped or closed.
-                            if matches!(e, NuitrackError::Wrapper(ref s) if s.contains("Channel disconnected")) {
-                                println!("Skeleton tracker data channel disconnected, likely due to Nuitrack closing. Stopping frame processing.");
-                                break 'process_frame true;
-                            }
-                            break 'process_frame false;
-                        }
-                    };
-
-                    println!(
-                        "Skeleton Frame {}: Timestamp: {}, Users: {}",
-                        i,
-                        frame.timestamp().unwrap_or(0), 
-                        frame.get_num_skeletons().unwrap_or(0)  
-                    );
-                    false
+                let frame = match skeleton_frame_result {
+                    Ok(frame) => frame,
+                    Err(e) => {
+                        error!(error = ?e, "Error receiving skeleton frame data");
+                        continue; // Skip to the next loop iteration
+                    }
                 };
 
-                if should_break_loop {
-                    break;
+                println!(
+                    "Skeleton Frame {}: Timestamp: {}",
+                    i,
+                    frame.timestamp().unwrap_or(0),
+                );
+
+                // 1. Get the slice of skeletons using our new cached getter.
+                //    This might fail the first time, so we handle the Result.
+                match frame.skeletons() {
+                    Ok(skeletons) => {
+                        println!("  Skeletons Found: {}", skeletons.len());
+                        // 2. Iterate through each detected skeleton.
+                        for (i, skeleton) in skeletons.iter().enumerate() {
+                            println!("    - Skeleton #{}: User ID {}", i + 1, skeleton.user_id);
+                            // 3. Iterate through the joints of this skeleton.
+                            for joint in &skeleton.joints {
+                                // 4. Print the details from the Rust-native Joint struct.
+                                //    We use a match to print only a few key joints for readability.
+                                match joint.joint_type {
+                                    nuitrack_rs::nuitrack::shared_types::skeleton::JointType::Head |
+                                    nuitrack_rs::nuitrack::shared_types::skeleton::JointType::LeftHand |
+                                    nuitrack_rs::nuitrack::shared_types::skeleton::JointType::RightHand => {
+                                        println!(
+                                            "      - {:?}: Confidence: {:.2}, Position: ({:.3}, {:.3}, {:.3})",
+                                            joint.joint_type,
+                                            joint.confidence,
+                                            joint.real.x,
+                                            joint.real.y,
+                                            joint.real.z
+                                        );
+                                    }
+                                    _ => {} // Ignore other joints for cleaner output
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(error = ?e, "Error processing skeletons in frame");
+                    }
                 }
             }
             Some(color_frame_result) = color_stream.next() => {
@@ -98,10 +125,10 @@ async fn main() -> anyhow::Result<()> {
                     let frame = match color_frame_result {
                         Ok(frame) => frame,
                         Err(e) => {
-                            eprintln!("Error receiving color frame data: {:?}", e);
+                            error!(error = ?e, "Error receiving color frame data");
                             // If the error is channel disconnected, it means the sender (AsyncHandTracker) was dropped or closed.
                             if matches!(e, NuitrackError::Wrapper(ref s) if s.contains("Channel disconnected")) {
-                                println!("Color sensor data channel disconnected, likely due to Nuitrack closing. Stopping frame processing.");
+                                error!(error = ?e, "Color sensor data channel disconnected, likely due to Nuitrack closing. Stopping frame processing.");
                                 break 'process_frame true;
                             }
                             break 'process_frame false;
@@ -110,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
                     println!(
                         "Color Frame {}:    Timestamp: {}",
                         i,
-                        frame.get_timestamp().unwrap_or(0), 
+                        frame.timestamp().unwrap_or(0), 
                     );
 
                     false
@@ -129,14 +156,14 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-    println!("Finished processing frames or example duration ended.");
+    info!("Finished processing frames or example duration ended.");
 
     // 6. Close the Nuitrack session (this will stop the internal update loop and release resources)
     session.close().await.map_err(|e| {
-        eprintln!("Error closing Nuitrack session: {:?}", e);
+        error!(error = ?e, "Error closing Nuitrack session");
         anyhow::anyhow!("Error closing Nuitrack session: {}", e)
     })?;
-    println!("Nuitrack session closed successfully.");
+    info!("Nuitrack session closed successfully.");
 
     
     Ok(())

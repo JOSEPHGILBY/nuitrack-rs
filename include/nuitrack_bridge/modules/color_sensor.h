@@ -48,7 +48,7 @@ namespace nuitrack_bridge::color_sensor {
 
 // Extern "C" function to be called from C++ lambda, implemented by Rust/CXX
 extern "C" {
-    void rust_color_sensor_callback_which_sends_for_async(
+    void rust_color_sensor_rgb_frame_dispatcher_async(
         std::shared_ptr<tdv::nuitrack::RGBFrame>& frame, // Pass by non-const reference
         void* rgbFrameSender
     );

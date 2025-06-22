@@ -46,7 +46,7 @@ namespace nuitrack_bridge::skeleton_tracker {
                     // Exceptions from the Rust callback are handled by CXX,
                     // typically by converting Rust panics into C++ exceptions (rust::Error).
                     // These would be caught by the catch blocks below if they propagate.
-                    rust_skeleton_tracker_callback_which_sends_for_async(frame, skeletonFrameSender);
+                    rust_skeleton_tracker_skeleton_frame_dispatcher_async(frame, skeletonFrameSender);
                 });
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(format_nuitrack_error("SkeletonTracker::connectOnUpdate", e.what()));
@@ -85,7 +85,7 @@ namespace nuitrack_bridge::skeleton_tracker {
         try {
             return tracker->connectOnNewUser(
                 [newUserFrameSender](tdv::nuitrack::SkeletonTracker::Ptr /* st_ptr */, int userID) {
-                    rust_skeleton_tracker_new_user_dispatcher(userID, newUserFrameSender);
+                    rust_skeleton_tracker_new_user_event_dispatcher_async(userID, newUserFrameSender);
                 });
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(format_nuitrack_error("SkeletonTracker::connectOnNewUser", e.what()));
@@ -120,7 +120,7 @@ namespace nuitrack_bridge::skeleton_tracker {
         try {
             return tracker->connectOnLostUser(
                 [lostUserFrameSender](tdv::nuitrack::SkeletonTracker::Ptr /* st_ptr */, int userID) {
-                    rust_skeleton_tracker_lost_user_dispatcher(userID, lostUserFrameSender);
+                    rust_skeleton_tracker_lost_user_event_dispatcher_async(userID, lostUserFrameSender);
                 });
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(format_nuitrack_error("SkeletonTracker::connectOnLostUser", e.what()));

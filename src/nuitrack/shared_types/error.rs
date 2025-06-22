@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum NuitrackError {
     #[error("Nuitrack FFI call failed: {0}")]
-    Ffi(#[from] cxx::Exception), // Can convert from cxx::Exception
+    FFI(#[from] cxx::Exception), // Can convert from cxx::Exception
 
     #[error("Nuitrack C++ wrapper error: {0}")]
     Wrapper(String),

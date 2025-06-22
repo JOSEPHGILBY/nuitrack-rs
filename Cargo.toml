@@ -30,9 +30,11 @@ links = "nuitrack"
 [workspace]
 members = [
     ".",  # Represents the main nuitrack-rs library package itself (in the current directory).
+    "examples/std-async",
     "examples/tokio-runtime-feature/basic", # Path to your example package.
     "validation_apps/test-concurrent-init"
 ]
+default-members = ["."]
 
 [lib]
 name = "nuitrack_rs"
@@ -47,6 +49,7 @@ tracing = "0.1"
 blocking = "1"
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
 tokio-util = { version = "0.7", optional = true }
+paste = "1.0"
 
 [build-dependencies]
 cxx-build = "1.0"

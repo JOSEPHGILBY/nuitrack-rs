@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(feature = "tokio_runtime")] // Arc is from std, but used with Tokio types here for clarity
 use std::sync::Arc;
 
-
+use tracing::{debug, error, info, trace, info_span, instrument, trace_span, warn, Instrument};
 use std::sync::atomic::{AtomicBool, Ordering};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
@@ -42,38 +42,47 @@ pub struct ActiveDeviceContext {
 pub(crate) struct NuitrackRuntimeGuard(());
 
 impl NuitrackRuntimeGuard {
+
+    #[instrument]
     pub(crate) async fn acquire(config_path_str: &str) -> NuitrackResult<Self> {
         if IS_NUITRACK_RUNTIME_INITIALIZED
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
+            debug!("Initialization skipped: Nuitrack runtime is already initialized.");
             return Err(NuitrackError::AlreadyInitialized);
         }
 
         let config_path_owned = config_path_str.to_string();
-        if let Err(e) = run_blocking(move || {
-            let _global_lock_guard_inner = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
-                NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during init attempt".into())
-            })?;
-            core_ffi::init(&config_path_owned)
-                .map_err(|cxx_e| NuitrackError::InitFailed(format!("FFI init_nuitrack: {}", cxx_e))) // Corrected
+        if let Err(e) = trace_span!("ffi", function = "Nuitrack::init").in_scope(|| {
+            run_blocking(move || {
+                let _global_lock_guard_inner = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
+                    NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during init attempt".into())
+                })?;
+                core_ffi::init(&config_path_owned)
+                    .map_err(|cxx_e| NuitrackError::InitFailed(format!("FFI init_nuitrack: {}", cxx_e))) // Corrected
+            })
         }).await {
             IS_NUITRACK_RUNTIME_INITIALIZED.store(false, Ordering::SeqCst);
             return Err(e); // Pass through the already correctly mapped error
         }
+        info!("Nuitrack runtime initialized.");
         Ok(Self(()))
     }
 
+    #[instrument(skip(self))]
     pub(crate) async fn release_async(&self) -> NuitrackResult<()> {
         if IS_NUITRACK_RUNTIME_INITIALIZED.swap(false, Ordering::SeqCst) {
-            run_blocking(|| {
-                let _global_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
-                    NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during release".into())
-                })?;
-                core_ffi::release()
-                    .map_err(|cxx_e| NuitrackError::OperationFailed(format!("FFI Nuitrack::release: {}", cxx_e))) // Corrected
+            trace_span!("ffi", function = "Nuitrack::release").in_scope(|| {
+                run_blocking(|| {
+                    let _global_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
+                        NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during release".into())
+                    })?;
+                    core_ffi::release()
+                        .map_err(|cxx_e| NuitrackError::OperationFailed(format!("FFI Nuitrack::release: {}", cxx_e))) // Corrected
+                })
             }).await?;
-            println!("[NuitrackRuntimeGuard] Nuitrack released via async release.");
+            info!("Nuitrack runtime released via async call.");
         }
         Ok(())
     }
@@ -83,16 +92,16 @@ impl Drop for NuitrackRuntimeGuard {
     fn drop(&mut self) {
         if let Ok(_global_lock) = NUITRACK_GLOBAL_API_LOCK.try_lock() {
             if IS_NUITRACK_RUNTIME_INITIALIZED.swap(false, Ordering::SeqCst) {
-                println!("[NuitrackRuntimeGuard] Dropping... Releasing Nuitrack resources (blocking in drop).");
+                info!("Dropping NuitrackRuntimeGuard, releasing resources (blocking).");
                 if let Err(e) = core_ffi::release() {
-                    eprintln!("[NuitrackRuntimeGuard] Error releasing Nuitrack in Drop: {}", e);
-                } else {
-                    println!("[NuitrackRuntimeGuard] Nuitrack released via Drop.");
+                    error!(error = %e, "Failed to release Nuitrack in Drop.");
                 }
+            } else {
+                trace!("Guard dropped, but runtime was not marked as initialized. No-op.");
             }
         } else {
             if IS_NUITRACK_RUNTIME_INITIALIZED.load(Ordering::SeqCst) {
-                eprintln!("[NuitrackRuntimeGuard] Could not acquire global lock in Drop. Nuitrack might not be released if init flag was true.");
+                warn!("Could not acquire global lock in Drop. Nuitrack might not be released if init flag was true.");
             }
         }
     }
@@ -125,12 +134,19 @@ pub struct NuitrackSession {
 }
 
 impl NuitrackSession {
+    #[instrument(skip(guard, active_devices, modules_for_update_loop))]
     pub(crate) fn new(
         guard: NuitrackRuntimeGuard,
         active_devices: Vec<ActiveDeviceContext>,
         modules_for_update_loop: Vec<WaitableModuleFFIVariant>,
         run_internal_update_loop: bool,
     ) -> NuitrackResult<Self> {
+        debug!(
+            num_devices = active_devices.len(),
+            num_update_modules = modules_for_update_loop.len(),
+            internal_loop_enabled = run_internal_update_loop,
+            "Creating new NuitrackSession."
+        );
         Ok(Self {
             guard,
             active_devices,
@@ -144,19 +160,22 @@ impl NuitrackSession {
         })
     }
 
+    #[instrument(skip(self), name = "nuitrack_start_processing")]
     pub async fn start_processing(&self) -> NuitrackResult<()> {
         {
-            
-            run_blocking(|| {
-                let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API Lock poisoned for Nuitrack::run".into()))?;
-                core_ffi::run()
-                .map_err(|e| NuitrackError::OperationFailed(format!("FFI Nuitrack::run: {}", e)))
+            trace_span!("ffi", function = "Nuitrack::run").in_scope(|| {
+                    run_blocking(|| {
+                    let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API Lock poisoned for Nuitrack::run".into()))?;
+                    core_ffi::run()
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI Nuitrack::run: {}", e)))
+                })
             }).await?;
         }
-        println!("[NuitrackSession] Nuitrack processing started (Nuitrack::run() called).");
+        info!("Nuitrack background processing thread started.");
 
         #[cfg(feature = "tokio_runtime")]
         {
+            debug!("Tokio runtime detected.");
             if self.run_internal_update_loop {
                 if let (Some(token_arc), Some(task_handle_mutex_arc)) =
                     (&self.cancellation_token, &self.update_task_handle)
@@ -169,93 +188,109 @@ impl NuitrackSession {
                     let modules_to_wait_on = self.modules_for_internal_loop.clone(); 
 
                     if modules_to_wait_on.is_empty() && !self.active_devices.is_empty() {
-                        println!("[NuitrackSession] Warning: Internal update loop started but no specific modules collected for waitUpdate. Loop will use global Nuitrack::update().");
+                        warn!("Internal update loop started but no specific modules collected for waitUpdate. Loop will use global Nuitrack::update().");
                     }
 
-                    let update_task = tokio::spawn(async move {
-                        println!("[NuitrackSession InternalLoop] Started.");
-                        'update_loop: loop {
-                            tokio::select! {
-                                biased;
-                                _ = token.cancelled() => {
-                                    println!("[NuitrackSession InternalLoop] Cancellation received.");
-                                    break 'update_loop;
-                                }
-                                _ = tokio::time::sleep(std::time::Duration::from_millis(1)) => { // Paces the loop
-                                    if !modules_to_wait_on.is_empty() {
-                                        for module_variant in &modules_to_wait_on {
-                                            if token.is_cancelled() { break 'update_loop; }
-                                            let wait_result = match module_variant {
-                                                WaitableModuleFFIVariant::ColorSensor(ptr) => {
-                                                    let ptr_clone = ptr.clone();
-                                                    run_blocking(move || {
-                                                        core_ffi::wait_update_color_sensor(&ptr_clone)
-                                                            .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
-                                                    }).await
+                    let update_task = tokio::spawn(
+                        async move {
+                            debug!("Task started.");
+                            'update_loop: loop {
+                                tokio::select! {
+                                    biased;
+                                    _ = token.cancelled() => {
+                                        info!("Cancellation received.");
+                                        break 'update_loop;
+                                    }
+                                    _ = tokio::time::sleep(std::time::Duration::from_millis(1)) => { // Paces the loop
+                                        if !modules_to_wait_on.is_empty() {
+                                            for module_variant in &modules_to_wait_on {
+                                                if token.is_cancelled() { break 'update_loop; }
+
+                                                // TODO: trace!(module = ?module_variant, "Calling module-specific waitUpdate.");
+
+                                                let wait_result = match module_variant {
+                                                    WaitableModuleFFIVariant::ColorSensor(ptr) => {
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_color_sensor").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                core_ffi::wait_update_color_sensor(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
+                                                    WaitableModuleFFIVariant::Hand(ptr) => {
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_hand_tracker").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                core_ffi::wait_update_hand_tracker(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
+                                                    WaitableModuleFFIVariant::Skeleton(ptr) => {
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_skeleton_tracker").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                // Ensure you have this FFI function bridged:
+                                                                core_ffi::wait_update_skeleton_tracker(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
+                                                };
+                                                if let Err(e) = wait_result {
+                                                    error!(error = %e, "Error in module waitUpdate");
+                                                    if NuitrackSession::is_fatal_error(&e) { token.cancel(); break 'update_loop; }
                                                 }
-                                                WaitableModuleFFIVariant::Hand(ptr) => {
-                                                    let ptr_clone = ptr.clone();
-                                                    run_blocking(move || {
-                                                        core_ffi::wait_update_hand_tracker(&ptr_clone)
-                                                            .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e_inner)))
-                                                    }).await
-                                                }
-                                                WaitableModuleFFIVariant::Skeleton(ptr) => {
-                                                    let ptr_clone = ptr.clone();
-                                                    run_blocking(move || {
-                                                        // Ensure you have this FFI function bridged:
-                                                        core_ffi::wait_update_skeleton_tracker(&ptr_clone)
-                                                            .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e_inner)))
-                                                    }).await
-                                                }
-                                            };
-                                            if let Err(e) = wait_result {
-                                                eprintln!("[NuitrackSession InternalLoop] Error in module waitUpdate: {:?}", e);
+                                            }
+                                        } else if !token.is_cancelled() && active_devices_are_present { 
+                                            debug!("No specific modules to wait on; falling back to global Nuitrack::update().");
+                                            // Fallback to global update if no specific modules, but devices are active
+                                            if let Err(e) = trace_span!("ffi", function="Nuitrack::update").in_scope(|| {
+                                                run_blocking(|| {
+                                                    core_ffi::update()
+                                                        .map_err(|cxx_e| NuitrackError::OperationFailed(format!("FFI Nuitrack::update in internal loop: {}", cxx_e)))
+                                                })
+                                            }).await { // Assuming nuitrack_update takes no args
+                                                error!(error = %e, "Error in global Nuitrack::update");
                                                 if NuitrackSession::is_fatal_error(&e) { token.cancel(); break 'update_loop; }
                                             }
+                                        } else if token.is_cancelled() { // Ensure break if cancelled after module loop
+                                            break 'update_loop;
                                         }
-                                    } else if !token.is_cancelled() && active_devices_are_present { 
-                                        // Fallback to global update if no specific modules, but devices are active
-                                        if let Err(e) = run_blocking(|| {
-                                            core_ffi::update()
-                                                .map_err(|cxx_e| NuitrackError::OperationFailed(format!("FFI Nuitrack::update in internal loop: {}", cxx_e)))
-                                        }).await { // Assuming nuitrack_update takes no args
-                                            eprintln!("[NuitrackSession InternalLoop] Error in global Nuitrack::update: {:?}", e);
-                                            if NuitrackSession::is_fatal_error(&e) { token.cancel(); break 'update_loop; }
-                                        }
-                                    } else if token.is_cancelled() { // Ensure break if cancelled after module loop
-                                        break 'update_loop;
                                     }
                                 }
                             }
+                            debug!("Task stopped.");
                         }
-                        println!("[NuitrackSession InternalLoop] Stopped.");
-                    });
+                        .instrument(info_span!("nuitrack_internal_update_loop")),
+                    );
                     let mut handle_guard = task_handle_mutex.lock().await;
                     *handle_guard = Some(update_task);
 
                 } else {
-                    eprintln!("[NuitrackSession] Internal error: update loop components not initialized despite run_internal_update_loop flag being true.");
+                    error!("Internal logic error: update loop components were missing when run_internal_update_loop was true.");
                 }
             }
         }
         #[cfg(not(feature = "tokio_runtime"))]
         {
             if self.run_internal_update_loop {
-                eprintln!(
-                    "[NuitrackSession] Warning: Internal update loop was requested, but 'tokio_runtime' feature is not enabled. Manual updates via drive_update_cycle() are required."
-                );
+                warn!("Internal update loop was requested, but 'tokio_runtime' feature is not enabled. Manual updates via drive_update_cycle() are required.");
             }
         }
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn drive_update_cycle(&self) -> NuitrackResult<()> {
         if self.active_devices.is_empty() {
             // No active devices, perhaps a global update is sufficient or do nothing
-            return run_blocking(|| {
+            return trace_span!("ffi", function="Nuitrack::update").in_scope(|| {
+                run_blocking(|| {
                 core_ffi::update()
                     .map_err(|cxx_e| NuitrackError::OperationFailed(format!("FFI Nuitrack::update in drive_update_cycle (no active devices): {}", cxx_e)))
+                })
             }).await; // Or return Ok(())
         }
 
@@ -263,66 +298,68 @@ impl NuitrackSession {
             // Determine which module to wait on for this device
             // This logic should align with how modules_for_internal_loop is populated
             let mut waited = false;
+            let device_span = info_span!("device_update", serial = %device_ctx.info.serial_number);
+            let _enter = device_span.enter();
+
             if let Some(cs_wrapper) = &device_ctx.color_sensor { // Prioritize skeleton
                 let ptr_clone = cs_wrapper.get_ffi_ptr_clone();
-                run_blocking(move || core_ffi::wait_update_color_sensor(&ptr_clone)
-                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_color_sensor: {}", e)))).await?;
+                trace_span!("ffi", function="wait_update_skeleton_tracker").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_color_sensor(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_color_sensor: {}", e))))
+                }).await?;
                 waited = true;
             } else if let Some(st_wrapper) = &device_ctx.skeleton_tracker { // Prioritize skeleton
                 let ptr_clone = st_wrapper.get_ffi_ptr_clone();
-                run_blocking(move || core_ffi::wait_update_skeleton_tracker(&ptr_clone)
-                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e)))).await?;
+                trace_span!("ffi", function="wait_update_hand_tracker").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_skeleton_tracker(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_skeleton_tracker: {}", e))))
+                }).await?;
                 waited = true;
             } else if let Some(ht_wrapper) = &device_ctx.hand_tracker {
                 let ptr_clone = ht_wrapper.get_ffi_ptr_clone();
-                run_blocking(move || core_ffi::wait_update_hand_tracker(&ptr_clone)
-                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e)))).await?;
+                trace_span!("ffi", function="wait_update_color_sensor").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_hand_tracker(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e))))
+                }).await?;
                 waited = true;
             }
-            // Add other representative modules here...
 
             if !waited {
-                // If no representative module was found for this device to call specific waitUpdate on,
-                // you might call the global Nuitrack::update() once per drive_update_cycle call
-                // However, the loop structure here implies one wait per active device.
-                // If a device has no "waitable" module, this might be an issue or global update is needed.
-                // For now, this device's update might be missed by this specific module iteration.
-                // Consider a global update if this loop doesn't do anything specific.
-                 println!("[NuitrackSession] drive_update_cycle: Device {:?} has no representative module for specific waitUpdate.", device_ctx.info.serial_number);
+                debug!("Device has no representative module for a specific waitUpdate call.");
             }
         }
-        // If no specific waitUpdate was called at all (e.g., no active devices had representative modules),
-        // then consider calling the global update once.
-        // if self.active_devices.iter().all(|ad| ad.skeleton_tracker.is_none() && ad.hand_tracker.is_none()) {
-        //    return run_blocking(core_ffi::nuitrack_update).await;
-        // }
         Ok(())
     }
     
     fn is_fatal_error(e: &NuitrackError) -> bool {
-        if let NuitrackError::Ffi(cxx_e) = e {
-            if cxx_e.what().contains("LicenseNotAcquired") {
+        if let NuitrackError::FFI(cxx_e) = e {
+            let what = cxx_e.what();
+            if what.contains("LicenseNotAcquired") {
+                // Add this line
+                warn!(error_msg = %what, "Fatal Nuitrack error detected.");
                 return true;
             }
         }
         false
     }
 
+    #[instrument(skip(self))]
     pub async fn close(self) -> NuitrackResult<()> {
         #[cfg(feature = "tokio_runtime")]
         {
             if self.run_internal_update_loop {
                 if let Some(token) = &self.cancellation_token {
+                    debug!("Requesting cancellation of internal update loop.");
                     token.cancel();
                 }
                 if let Some(handle_arc) = &self.update_task_handle {
                     let mut handle_guard = handle_arc.lock().await;
                     if let Some(handle) = handle_guard.take() {
-                        println!("[NuitrackSession] Awaiting internal update task termination...");
+                        info!("Awaiting internal update task termination...");
                         if let Err(e) = handle.await {
-                            eprintln!("[NuitrackSession] Internal update task panicked or was cancelled with error: {:?}", e);
+                            error!(join_error = ?e, "Internal update task panicked or was cancelled.");
                         } else {
-                            println!("[NuitrackSession] Internal update task joined cleanly.");
+                            info!("Internal update task joined cleanly.");
                         }
                     }
                 }
@@ -330,8 +367,9 @@ impl NuitrackSession {
         }
         
         self.guard.release_async().await?;
+        debug!("Explicitly forgetting NuitrackRuntimeGuard to prevent double-release in Drop.");
         std::mem::forget(self.guard); 
-        println!("[NuitrackSession] Nuitrack resources explicitly released.");
+        info!("Nuitrack session closed successfully.");
         Ok(())
     }
 }

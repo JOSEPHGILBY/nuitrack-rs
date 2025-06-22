@@ -1,4 +1,4 @@
-// File: src/nuitrack/session_builder.rs
+use tracing::{info, info_span, instrument, trace_span, warn};
 use std::path::Path;
 use cxx::SharedPtr;
 
@@ -18,7 +18,7 @@ use super::hand_tracker::AsyncHandTracker;
 // use super::skeleton_tracker::AsyncSkeletonTracker; // You'll need this
 
 // Helper FFI type alias
-type FfiDevice = crate::nuitrack_bridge::device::ffi::Device;
+type FFIDevice = crate::nuitrack_bridge::device::ffi::Device;
 
 
 #[derive(Default)]
@@ -38,7 +38,9 @@ impl NuitrackSessionBuilder {
         }
     }
 
+    #[instrument]
     pub async fn create_session_from_single_default_device(modules_to_create: Vec<ModuleType>) -> NuitrackResult<NuitrackSession> {
+        info!(?modules_to_create, "Creating session for single default device.");
         let device_config = DeviceConfig {
             selector: DeviceSelector::ByIndex(0), 
             modules_to_create,
@@ -68,6 +70,7 @@ impl NuitrackSessionBuilder {
 
     /// Initializes the Nuitrack session based on the builder's configuration.
     /// This path is used when the user provides all configurations upfront.
+    #[instrument(skip(self), name = "init_session")]
     pub async fn init_session(self) -> NuitrackResult<NuitrackSession> {
         let guard = NuitrackRuntimeGuard::acquire(&self.global_config_path.unwrap_or_default()).await?;
         
@@ -78,11 +81,13 @@ impl NuitrackSessionBuilder {
         
         let effective_configs = if self.device_configurations.is_empty() {
             if available_devices_cache.len() == 1 {
+                info!("No device configurations provided; defaulting to the single available device.");
                 vec![DeviceConfig { // Default to the single available device
                     selector: DeviceSelector::ByIndex(0), 
                     modules_to_create: vec![ModuleType::HandTracker, ModuleType::SkeletonTracker], // Sensible defaults
                 }]
             } else if available_devices_cache.is_empty() {
+                warn!("No devices found and no configurations provided. Session will have no active devices.");
                 Vec::new() // No devices, no configs, session will have no active devices
             } else {
                 // Multiple devices but no user config. Let configure_devices_and_modules handle or error based on policy.
@@ -108,13 +113,16 @@ impl NuitrackSessionBuilder {
     }
 
     /// Starts a phased initialization allowing device discovery first.
+    #[instrument(skip(self))]
     pub async fn discover_devices_first(self) -> NuitrackResult<DeviceDiscoveryState> {
         let config_path_for_acquire = self.global_config_path.as_deref().unwrap_or_default();
+        info!("Acquiring runtime guard and discovering devices...");
         let guard = NuitrackRuntimeGuard::acquire(config_path_for_acquire).await?;
         let available_devices = Self::fetch_available_devices_info_internal().await.map_err(|e| {
             // Guard will drop and release if this errors.
             e
         })?;
+        info!(count = available_devices.len(), "Device discovery complete.");
 
         Ok(DeviceDiscoveryState {
             guard: Some(guard),
@@ -124,32 +132,36 @@ impl NuitrackSessionBuilder {
     }
     
     /// Internal helper to get device list and info. Assumes Nuitrack is globally initialized.
+    #[instrument]
     async fn fetch_available_devices_info_internal() -> NuitrackResult<Vec<DiscoveredDeviceInfo>> {
-        run_blocking(move || {
-            let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for getDeviceList".into()))?;
-            let devices = device_ffi::get_devices()
-                .map_err(|e| NuitrackError::DeviceError(format!("FFI GetDeviceList: {}", e)))?;
-            let mut devices_info_vec = Vec::new();
-            for i in 0..devices.len() {
-                let Some(wrapped_device) = devices.get(i) else { continue };
-                let device = device_ffi::unwrap_shared_ptr_device(wrapped_device);
-                let name = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::DEVICE_NAME).unwrap_or_else(|_| "N/A".to_string());
-                let serial = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::SERIAL_NUMBER).unwrap_or_else(|_| "N/A".to_string());
-                let provider = device_ffi::get_device_info(&device, device_ffi::DeviceInfoType::PROVIDER_NAME).unwrap_or_else(|_| "N/A".to_string());
-                devices_info_vec.push(DiscoveredDeviceInfo { 
-                    name, 
-                    serial_number: serial, 
-                    provider_name: provider, 
-                    original_index: i, 
-                    ffi_device_ptr: device // Essential for selection
-                });
-                
-            }
-            Ok(devices_info_vec)
+        trace_span!("ffi", function = "Nuitrack::getDeviceList").in_scope(|| {
+            run_blocking(move || {
+                let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for getDeviceList".into()))?;
+                let devices = device_ffi::devices()
+                    .map_err(|e| NuitrackError::DeviceError(format!("FFI GetDeviceList: {}", e)))?;
+                let mut devices_info_vec = Vec::new();
+                for i in 0..devices.len() {
+                    let Some(wrapped_device) = devices.get(i) else { continue };
+                    let device = device_ffi::unwrap_shared_ptr_device(wrapped_device);
+                    let name = device_ffi::device_info(&device, device_ffi::DeviceInfoType::DEVICE_NAME).unwrap_or_else(|_| "N/A".to_string());
+                    let serial = device_ffi::device_info(&device, device_ffi::DeviceInfoType::SERIAL_NUMBER).unwrap_or_else(|_| "N/A".to_string());
+                    let provider = device_ffi::device_info(&device, device_ffi::DeviceInfoType::PROVIDER_NAME).unwrap_or_else(|_| "N/A".to_string());
+                    devices_info_vec.push(DiscoveredDeviceInfo { 
+                        name, 
+                        serial_number: serial, 
+                        provider_name: provider, 
+                        original_index: i, 
+                        ffi_device_ptr: device // Essential for selection
+                    });
+                    
+                }
+                Ok(devices_info_vec)
+            })
         }).await
     }
 
     /// Common logic: takes discovered devices and user configs, sets devices, creates modules.
+    #[instrument(skip(available_devices_cache, user_device_configs))]
     async fn configure_devices_and_modules(
         available_devices_cache: Vec<DiscoveredDeviceInfo>,
         user_device_configs: Vec<DeviceConfig>,
@@ -158,25 +170,29 @@ impl NuitrackSessionBuilder {
         let mut modules_for_update_loop: Vec<WaitableModuleFFIVariant> = Vec::new();
 
         if user_device_configs.is_empty() && !available_devices_cache.is_empty() {
-             println!("[NuitrackSessionBuilder] No device configurations provided, but devices are available. No modules will be activated by default in this path.");
-             // Or, if you have a strong "default single device" policy, you could apply it here too,
-             // but the direct `init_session` already handles a simple version of it.
+            warn!("No device configurations provided, but devices are available. No modules will be activated.");
         }
 
 
-        for dev_config in user_device_configs {
+        for (i, dev_config) in user_device_configs.into_iter().enumerate() {
+            let config_span = info_span!("device_config", id = i, selector = ?dev_config.selector);
+            let _enter = config_span.enter();
             let (selected_device_info_ref, target_ffi_device_ptr_clone) = 
                 Self::find_target_device_from_cache(&available_devices_cache, &dev_config.selector)?;
+
+            info!(device_serial = %selected_device_info_ref.serial_number, "Configuring device.");    
 
             // Set this device as active globally
             { // Scope for global lock
                 let ptr_for_set = target_ffi_device_ptr_clone.clone();
-                run_blocking(move || {
-                    let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for set_device".into()))?;
-                    device_ffi::set_device(&ptr_for_set)
-                        .map_err(|cxx_e| NuitrackError::DeviceError(format!("FFI Nuitrack::setDevice failed: {}", cxx_e)))
-                        // Alternatively, for a more generic FFI error:
-                        // .map_err(NuitrackError::from)
+                trace_span!("ffi", function="Nuitrack::setDevice").in_scope(|| {
+                    run_blocking(move || {
+                        let _g_lock = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| NuitrackError::OperationFailed("Global API lock for set_device".into()))?;
+                        device_ffi::set_device(&ptr_for_set)
+                            .map_err(|cxx_e| NuitrackError::DeviceError(format!("FFI Nuitrack::setDevice failed: {}", cxx_e)))
+                            // Alternatively, for a more generic FFI error:
+                            // .map_err(NuitrackError::from)
+                    })
                 }).await?;
             }
 
@@ -226,10 +242,11 @@ impl NuitrackSessionBuilder {
     }
 
     /// Helper to find a device in the cached list based on selector.
+    #[instrument(skip(available_devices))]
     fn find_target_device_from_cache<'a>(
         available_devices: &'a [DiscoveredDeviceInfo],
         selector: &DeviceSelector,
-    ) -> NuitrackResult<(&'a DiscoveredDeviceInfo, SharedPtr<FfiDevice>)> { // Returns refs/cloned SharedPtr
+    ) -> NuitrackResult<(&'a DiscoveredDeviceInfo, SharedPtr<FFIDevice>)> { // Returns refs/cloned SharedPtr
         match selector {
             DeviceSelector::DefaultSingle => {
                 if available_devices.len() == 1 {
@@ -267,10 +284,12 @@ impl DeviceDiscoveryState {
     }
 
     /// User calls this after inspecting devices and deciding on configurations.
+    #[instrument(skip(self, user_selected_device_configs))]
     pub async fn finalize_session(
         mut self, // Takes ownership
         user_selected_device_configs: Vec<DeviceConfig>,
     ) -> NuitrackResult<NuitrackSession> {
+        info!("Finalizing session from discovered devices.");
         let guard = self.guard.take().ok_or_else(|| NuitrackError::OperationFailed("NuitrackRuntimeGuard already taken/missing in DeviceDiscoveryState".into()))?;
         
         // Use the common configuration logic, passing the already discovered devices
@@ -291,10 +310,8 @@ impl DeviceDiscoveryState {
 
 impl Drop for DeviceDiscoveryState {
     fn drop(&mut self) {
-        // If finalize_session was not called, the guard is still Some.
-        // Its own Drop implementation will call Nuitrack::release() and reset the global flag.
         if let Some(_guard_being_dropped) = self.guard.take() {
-            println!("[DeviceDiscoveryState] Dropped without finalizing session. Nuitrack resources will be released by NuitrackRuntimeGuard's Drop.");
+            warn!("DeviceDiscoveryState dropped without finalizing session. Nuitrack resources will be released by NuitrackRuntimeGuard's Drop.");
         }
     }
 }

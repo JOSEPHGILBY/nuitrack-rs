@@ -45,7 +45,7 @@ namespace nuitrack_bridge::hand_tracker {
             return tracker->connectOnUpdate(
                 [handFrameSender](tdv::nuitrack::HandTrackerData::Ptr data) {
                     // Call the Rust dispatcher
-                    rust_hand_tracker_on_update_dispatcher(data, handFrameSender);
+                    rust_hand_tracker_hand_frame_dispatcher_async(data, handFrameSender);
                 });
         } catch (const tdv::nuitrack::Exception& e) {
             throw std::runtime_error(format_nuitrack_error("HandTracker::connectOnUpdate", e.what()));

@@ -95,18 +95,18 @@ namespace nuitrack_bridge::skeleton_tracker {
 
 
 extern "C" {
-    void rust_skeleton_tracker_callback_which_sends_for_async(
+    void rust_skeleton_tracker_skeleton_frame_dispatcher_async(
         std::shared_ptr<tdv::nuitrack::SkeletonData>& data,
         void* skeletonFrameSender
     );
 
     // New dispatcher declarations for C++ to call Rust
-    void rust_skeleton_tracker_new_user_dispatcher(
+    void rust_skeleton_tracker_new_user_event_dispatcher_async(
         int userID,
         void* newUserFrameSender
     );
 
-    void rust_skeleton_tracker_lost_user_dispatcher(
+    void rust_skeleton_tracker_lost_user_event_dispatcher_async(
         int userID,
         void* lostUserFrameSender
     );
