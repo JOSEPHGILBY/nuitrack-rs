@@ -59,8 +59,8 @@ async fn main() -> Result<()> {
 
 
     // 3. Initialize Nuitrack
-    let (mut hand_stream, mut skeleton_stream, mut color_stream, session) =
-        setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor).await?;
+    let (mut hand_stream, mut skeleton_stream, mut color_stream, mut depth_stream, session) =
+        setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor, DepthSensor).await?;
     session.start_processing().await?;
     info!("Nuitrack session started.");
 
@@ -167,6 +167,9 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                }
+                Some(Ok(_)) = depth_stream.next() => {
+                    // do nothing, but we need to read otherwise we get a memory leak
                 }
                 else => {
                     // All streams have closed

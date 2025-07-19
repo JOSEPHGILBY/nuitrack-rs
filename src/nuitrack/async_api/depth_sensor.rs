@@ -1,11 +1,9 @@
 use crate::nuitrack::shared_types::depth_frame::DepthFrame;
 use crate::nuitrack_bridge::modules::depth_sensor::ffi as depth_sensor_ffi;
-use crate::nuitrack_bridge::types::{
-    output_mode::ffi::OutputMode as OutputModeFfi,
-    vector3::ffi::Vector3 as Vector3Ffi
-};
 use tracing::warn;
 
+pub use crate::nuitrack_bridge::types::output_mode::ffi::OutputMode;
+pub use crate::nuitrack_bridge::types::vector3::ffi::Vector3;
 // This macro likely generates the boilerplate for creating the sensor,
 // handling callbacks, and creating a data stream.
 generate_async_tracker! {
@@ -30,7 +28,7 @@ generate_async_tracker! {
 impl AsyncDepthSensor {
     /// Gets the current output mode of the depth sensor.
     #[instrument(skip(self))]
-    pub async fn output_mode(&self) -> NuitrackResult<OutputModeFfi> {
+    pub async fn output_mode(&self) -> NuitrackResult<OutputMode> {
         let ptr = self.get_ffi_ptr_clone();
         trace_span!("ffi", function = "depth_sensor_ffi::output_mode").in_scope(
             || {
@@ -105,8 +103,8 @@ impl AsyncDepthSensor {
     #[instrument(skip(self))]
     pub async fn convert_proj_to_real(
         &self,
-        point: Vector3Ffi,
-    ) -> NuitrackResult<Vector3Ffi> {
+        point: Vector3,
+    ) -> NuitrackResult<Vector3> {
         let ptr = self.get_ffi_ptr_clone();
         trace_span!("ffi", function = "depth_sensor_ffi::convert_proj_to_real_coords")
             .in_scope(move || {
@@ -126,8 +124,8 @@ impl AsyncDepthSensor {
     #[instrument(skip(self))]
     pub async fn convert_real_to_proj(
         &self,
-        point: Vector3Ffi,
-    ) -> NuitrackResult<Vector3Ffi> {
+        point: Vector3,
+    ) -> NuitrackResult<Vector3> {
         let ptr = self.get_ffi_ptr_clone();
         trace_span!("ffi", function = "depth_sensor_ffi::convert_real_to_proj_coords")
             .in_scope(move || {
