@@ -199,6 +199,18 @@ macro_rules! generate_async_tracker {
             )*
         }
 
+        impl Clone for $tracker_name {
+            fn clone(&self) -> Self {
+                Self {
+                    ptr: self.ptr.clone(),
+                    $(
+                        $handler_id_field: None,
+                        $raw_sender_field: None,
+                    )*
+                }
+            }
+        }
+
         unsafe impl Send for $tracker_name {}
         unsafe impl Sync for $tracker_name {}
 
