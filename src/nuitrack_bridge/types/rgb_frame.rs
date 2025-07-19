@@ -1,6 +1,7 @@
 #[cxx::bridge(namespace = "nuitrack_bridge::rgb_frame")]
 pub mod ffi {
     
+    #[derive{Debug, Clone, Copy, PartialEq}]
     pub struct Color3 {
         pub blue: u8,
         pub green: u8,

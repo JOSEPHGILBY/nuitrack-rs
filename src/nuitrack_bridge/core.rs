@@ -7,6 +7,7 @@ pub mod ffi {
         type ColorSensor = crate::nuitrack_bridge::modules::color_sensor::ffi::ColorSensor;
         type HandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker; // This refers to ::tdv::nuitrack::HandTracker
         type SkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker;
+        type DepthSensor = crate::nuitrack_bridge::modules::depth_sensor::ffi::DepthSensor;
     }
 
     unsafe extern "C++" {
@@ -24,6 +25,9 @@ pub mod ffi {
 
         #[cxx_name = "waitUpdateSkeletonTracker"]
         fn wait_update_skeleton_tracker(module: &SharedPtr<SkeletonTracker>) -> Result<()>;
+
+        #[cxx_name = "waitUpdateDepthSensor"]
+        fn wait_update_depth_sensor(module: &SharedPtr<DepthSensor>) -> Result<()>;
 
         pub fn release() -> Result<()>;
     }

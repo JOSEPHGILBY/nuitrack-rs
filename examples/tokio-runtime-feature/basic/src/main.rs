@@ -135,9 +135,11 @@ async fn main() -> anyhow::Result<()> {
                         }
                     };
                     println!(
-                        "Color Frame {}:    Timestamp: {}",
+                        "Color Frame {}:    Timestamp: {}   Width: {:?}   Height: {:?}",
                         i,
                         frame.timestamp().unwrap_or(0), 
+                        frame.cols(),
+                        frame.rows(),
                     );
 
                     false

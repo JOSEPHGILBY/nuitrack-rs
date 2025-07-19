@@ -50,6 +50,16 @@ macro_rules! setup_nuitrack_streams {
                             .map_err(|e_text| NuitrackError::OperationFailed(format!("Failed to get ColorSensor stream: {}", e_text)))
                     }
                 };
+                ($session_ref:expr, DepthSensor) => {
+                    {
+                        let sensor = $session_ref.active_devices
+                            .get_mut(0)
+                            .and_then(|device_context| device_context.depth_sensor.as_mut())
+                            .ok_or_else(|| NuitrackError::ModuleCreationFailed("AsyncDepthSensor not found for the configured device.".to_string()))?;
+                        sensor.depth_frames_stream() // Method name from generate_async_tracker!
+                            .map_err(|e_text| NuitrackError::OperationFailed(format!("Failed to get DepthSensor stream: {}", e_text)))
+                    }
+                };
                 // To satisfy type checking for the Result in the compile_error! case,
                 // we need a concrete error type. Since the macro is generic over stream types,
                 // this fallback error type doesn't perfectly align with the stream's Ok type.

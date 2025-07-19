@@ -3,6 +3,7 @@ use std::path::Path;
 use cxx::SharedPtr;
 
 use crate::nuitrack::async_api::color_sensor::AsyncColorSensor;
+use crate::nuitrack::async_api::depth_sensor::AsyncDepthSensor;
 use crate::nuitrack_bridge::device::ffi as device_ffi;
 use super::async_dispatch::run_blocking;
 use super::skeleton_tracker::AsyncSkeletonTracker;
@@ -201,6 +202,7 @@ impl NuitrackSessionBuilder {
                 color_sensor: None,
                 hand_tracker: None, 
                 skeleton_tracker: None,
+                depth_sensor: None,
             };
             
             let mut representative_module_for_device: Option<WaitableModuleFFIVariant> = None;
@@ -228,6 +230,13 @@ impl NuitrackSessionBuilder {
                         }
                         ad_context.skeleton_tracker = Some(st);
                         
+                    }
+                    ModuleType::DepthSensor => {
+                        let ds = AsyncDepthSensor::new_async().await?;
+                        if representative_module_for_device.is_none() {
+                            representative_module_for_device = Some(WaitableModuleFFIVariant::DepthSensor(ds.get_ffi_ptr_clone()));
+                        }
+                        ad_context.depth_sensor = Some(ds);
                     }
                     _ => {}
                     // ... other module types like DepthSensor, ColorSensor, UserTracker ...

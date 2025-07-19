@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "nuitrack/types/Skeleton.h"
+#include "nuitrack-rs/src/nuitrack_bridge/types/vector3.rs.h"
 
 namespace nuitrack_bridge::skeleton {
     //using JointType = tdv::nuitrack::JointType;

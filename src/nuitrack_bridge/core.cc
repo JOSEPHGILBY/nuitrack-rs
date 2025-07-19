@@ -85,6 +85,20 @@ namespace nuitrack_bridge::core {
         }
     }
 
+    void waitUpdateDepthSensor(const std::shared_ptr<DepthSensor>& depthSensor) {
+        try {
+            Nuitrack::waitUpdate(depthSensor);
+        } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { 
+            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(DepthSensor): ") + e.what());
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack waitUpdate(DepthSensor) failed: ") + e.what());
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Exception during Nuitrack waitUpdate(DepthSensor): ") + e.what());
+        } catch (...) {
+            throw std::runtime_error("Unknown exception during Nuitrack waitUpdate(DepthSensor)");
+        }
+    }
+
     // New implementation for release wrapper
     void release() {
         try {

@@ -1,3 +1,4 @@
+pub mod depth_frame;
 pub mod error;
 pub mod hand_frame;
 pub mod hand;

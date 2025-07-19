@@ -1,6 +1,14 @@
 #[cxx::bridge(namespace = "nuitrack_bridge::skeleton")]
 pub mod ffi {
 
+    #[namespace = "nuitrack_bridge::vector3"]
+    unsafe extern "C++" {
+        // We're telling cxx that the Rust type `Vector3` corresponds to a type
+        // from the `nuitrack_bridge::vector3` C++ namespace. We provide the
+        // full Rust path so the Rust compiler can find its definition.
+        type Vector3 = crate::nuitrack_bridge::types::vector3::ffi::Vector3;
+    }
+
 
     #[repr(i32)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -55,13 +63,6 @@ pub mod ffi {
         RightAnkle = 23,
         #[cxx_name = "JOINT_RIGHT_FOOT"]
         RightFoot = 24,      // Right foot (not used in the current version by Nuitrack).
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct Vector3 {
-        pub x: f32,
-        pub y: f32,
-        pub z: f32,
     }
 
     #[derive(Debug, Clone, Copy)]

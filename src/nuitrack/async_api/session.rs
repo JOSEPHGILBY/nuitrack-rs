@@ -9,7 +9,7 @@ use tracing::{debug, error, info, trace, info_span, instrument, trace_span, warn
 use std::sync::atomic::{AtomicBool, Ordering};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
-use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker, color_sensor::AsyncColorSensor};
+use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker, color_sensor::AsyncColorSensor, depth_sensor::AsyncDepthSensor};
 
 use crate::nuitrack::shared_types::{
     error::{NuitrackError, Result as NuitrackResult}, 
@@ -22,6 +22,7 @@ use crate::nuitrack_bridge::core::ffi as core_ffi;
 type FFIColorSensor = crate::nuitrack_bridge::modules::color_sensor::ffi::ColorSensor;
 type FFIHandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker;
 type FFISkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker; // Ensure this bridge exists
+type FFIDepthSensor = crate::nuitrack_bridge::modules::depth_sensor::ffi::DepthSensor;
 
 // --- Make these crate-visible ---
 pub(crate) static IS_NUITRACK_RUNTIME_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -35,6 +36,7 @@ pub struct ActiveDeviceContext {
     //pub user_tracker: Option<crate::nuitrack::user::AsyncUserTracker>, // Placeholder
     pub skeleton_tracker: Option<AsyncSkeletonTracker>, // Placeholder
     pub hand_tracker: Option<AsyncHandTracker>,
+    pub depth_sensor: Option<AsyncDepthSensor>,
     // pub other_tracker: Option<AsyncOtherTracker>, // Example for your second tracker
 }
 
@@ -114,6 +116,7 @@ pub(crate) enum WaitableModuleFFIVariant {
     ColorSensor(SharedPtr<FFIColorSensor>),
     Hand(SharedPtr<FFIHandTracker>),
     Skeleton(SharedPtr<FFISkeletonTracker>),
+    DepthSensor(SharedPtr<FFIDepthSensor>)
     // Add other waitable module FFI types here
 }
 
@@ -238,6 +241,16 @@ impl NuitrackSession {
                                                             })
                                                         }).await
                                                     }
+                                                    WaitableModuleFFIVariant::DepthSensor(ptr) => {
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_depth_sensor").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                // Assuming you have this FFI function bridged:
+                                                                core_ffi::wait_update_depth_sensor(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_depth_sensor: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
                                                 };
                                                 if let Err(e) = wait_result {
                                                     error!(error = %e, "Error in module waitUpdate");
@@ -321,6 +334,13 @@ impl NuitrackSession {
                 trace_span!("ffi", function="wait_update_color_sensor").in_scope(|| {
                     run_blocking(move || core_ffi::wait_update_hand_tracker(&ptr_clone)
                     .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_hand_tracker: {}", e))))
+                }).await?;
+                waited = true;
+            } else if let Some(ds_wrapper) = &device_ctx.depth_sensor { // Add this block
+                let ptr_clone = ds_wrapper.get_ffi_ptr_clone();
+                trace_span!("ffi", function="wait_update_depth_sensor").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_depth_sensor(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_depth_sensor: {}", e))))
                 }).await?;
                 waited = true;
             }
