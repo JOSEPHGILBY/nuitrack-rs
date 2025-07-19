@@ -4,7 +4,6 @@ use nuitrack_rs::nuitrack::{
         session::NuitrackSession
     },
     shared_types::{
-        session_config::ModuleType,
         error::NuitrackError
     }
 };
