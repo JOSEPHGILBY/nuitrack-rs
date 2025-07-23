@@ -33,7 +33,8 @@ members = [
     "examples/std-async",
     "examples/tokio-runtime-feature/basic", # Path to your example package.
     "examples/tokio-runtime-feature/tui",
-    "validation_apps/test-concurrent-init"
+    "validation_apps/test-concurrent-init",
+    "validation_apps/test-serde-feature-builds",
 ]
 default-members = ["."]
 
@@ -51,6 +52,7 @@ blocking = "1"
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
 tokio-util = { version = "0.7", optional = true }
 paste = "1.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
 
 [build-dependencies]
 cxx-build = "1.0"
@@ -59,7 +61,8 @@ anyhow = "1.0"
 
 [features]
 default = []
-tokio_runtime = ["tokio", "tokio-util"]
+tokio_runtime = ["dep:tokio", "dep:tokio-util"]
+serde = ["dep:serde"]
 
 [package.metadata.nuitrack]
 sdk_version_tag = "v0.38"

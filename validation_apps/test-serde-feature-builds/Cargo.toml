@@ -1,0 +1,10 @@
+[package]
+name = "test-serde-feature-builds"
+version = "0.0.1"
+edition = "2024" # Using 2021 as it's the current stable edition
+publish = false
+
+[dependencies]
+# This is the key part: we depend on the local nuitrack-rs crate
+# and explicitly enable the "serde" feature.
+nuitrack-rs = { path = "../..", features = ["serde"] }

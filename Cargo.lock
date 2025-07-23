@@ -1308,6 +1308,7 @@ dependencies = [
  "futures-core",
  "paste",
  "pin-project-lite",
+ "serde",
  "thiserror 2.0.12",
  "tokio",
  "tokio-util",
@@ -1963,6 +1964,13 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "test-serde-feature-builds"
+version = "0.0.1"
+dependencies = [
+ "nuitrack-rs",
 ]
 
 [[package]]

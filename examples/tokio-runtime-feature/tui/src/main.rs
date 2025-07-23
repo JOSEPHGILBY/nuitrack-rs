@@ -42,6 +42,7 @@ impl AppState {
     }
 }
 
+// IMPORTANT: Run this in a separate terminal and not the integrated terminal for VSCode! Don't use the code lens to run this example!
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Setup

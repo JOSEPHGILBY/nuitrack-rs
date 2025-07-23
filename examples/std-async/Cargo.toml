@@ -1,7 +1,7 @@
 [package]
 name = "std-async"
 version = "0.0.1"
-edition = "2021" # Or your preferred edition
+edition = "2024" # Or your preferred edition
 publish = false
 
 [dependencies]
