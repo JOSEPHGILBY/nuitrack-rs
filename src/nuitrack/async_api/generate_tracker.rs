@@ -154,31 +154,47 @@ macro_rules! generate_async_tracker {
         // Match an empty list to terminate recursion
         remaining_streams: []
     } => {
-        // ... The entire implementation block is unchanged ...
         use cxx::SharedPtr;
         use futures_core::Stream;
         use futures_channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
-        use pin_project_lite::pin_project;
+        use pin_project::{pin_project, pinned_drop};
         use std::pin::Pin;
         use std::task::{Context, Poll};
         use crate::nuitrack::shared_types::error::{NuitrackError, Result as NuitrackResult};
         use super::async_dispatch::run_blocking;
         use tracing::{debug, error, instrument, trace_span};
+        use std::sync::{Arc, Mutex};
 
         $(
             type $sender_type_alias = UnboundedSender<NuitrackResult<$rust_item_type>>;
 
-            pin_project! {
-                pub struct $stream_struct_name {
-                    #[pin]
-                    rx: UnboundedReceiver<NuitrackResult<$rust_item_type>>,
-                }
+            #[pin_project(PinnedDrop)]
+            pub struct $stream_struct_name {
+                #[pin]
+                rx: UnboundedReceiver<NuitrackResult<$rust_item_type>>,
+                active_state: Arc<Mutex<Option<StreamActiveState<$rust_item_type>>>>,
+                tracker_ptr: SharedPtr<$ffi_tracker_type>,
             }
+            
 
             impl Stream for $stream_struct_name {
                 type Item = NuitrackResult<$rust_item_type>;
                 fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
                     self.project().rx.poll_next(cx)
+                }
+            }
+
+            #[pinned_drop]
+            impl PinnedDrop for $stream_struct_name {
+                fn drop(self: Pin<&mut Self>) {
+                    let mut state_guard = self.active_state.lock().unwrap();
+                    if let Some(active_state) = state_guard.take() {
+                        debug!(stream = stringify!($stream_struct_name), "Dropping stream and disconnecting callback.");
+                        if let Err(e) = $ffi_disconnect_stream_fn(&self.tracker_ptr, active_state.handler_id) {
+                            error!(error = %e, "FFI disconnect error during PinnedDrop");
+                        }
+                        unsafe { let _ = Box::from_raw(active_state.raw_sender_ptr as *mut $sender_type_alias); };
+                    }
                 }
             }
             
@@ -191,11 +207,18 @@ macro_rules! generate_async_tracker {
             );
         )*
 
+        struct StreamActiveState<T> {
+            handler_id: u64,
+            raw_sender_ptr: *mut $c_void_type,
+            _phantom: std::marker::PhantomData<T>,
+        }
+
+        unsafe impl<T: Send> Send for StreamActiveState<T> {}
+
         pub struct $tracker_name {
             ptr: SharedPtr<$ffi_tracker_type>,
             $(
-                $handler_id_field: Option<u64>,
-                $raw_sender_field: Option<*mut $c_void_type>,
+                $handler_id_field: Arc<Mutex<Option<StreamActiveState<$rust_item_type>>>>,
             )*
         }
 
@@ -204,8 +227,7 @@ macro_rules! generate_async_tracker {
                 Self {
                     ptr: self.ptr.clone(),
                     $(
-                        $handler_id_field: None,
-                        $raw_sender_field: None,
+                        $handler_id_field: Arc::new(Mutex::new(None)),
                     )*
                 }
             }
@@ -228,7 +250,10 @@ macro_rules! generate_async_tracker {
                 }).await?;
                 Ok(Self {
                     ptr: tracker_ptr,
-                    $($handler_id_field: None, $raw_sender_field: None,)*
+                    // $($handler_id_field: None, $raw_sender_field: None,)*
+                    $(
+                        $handler_id_field: Arc::new(Mutex::new(None)),
+                    )*
                 })
             }
 
@@ -239,7 +264,9 @@ macro_rules! generate_async_tracker {
             $(
                 #[instrument(skip(self), name = "get_stream")]
                 pub fn $stream_method_name(&mut self) -> NuitrackResult<$stream_struct_name> {
-                    if self.$handler_id_field.is_some() {
+                    let mut state_guard = self.$handler_id_field.lock().unwrap();
+
+                    if state_guard.is_some() {
                         return Err(NuitrackError::OperationFailed(
                             format!("Stream {} already initialized for {}.", stringify!($stream_struct_name), stringify!($tracker_name))
                         ));
@@ -248,15 +275,25 @@ macro_rules! generate_async_tracker {
                     
                     let sender_boxed = Box::new(tx);
                     let sender_raw_ptr = Box::into_raw(sender_boxed) as *mut $c_void_type;
-                    self.$raw_sender_field = Some(sender_raw_ptr);
+                    //self.$raw_sender_field = Some(sender_raw_ptr);
 
                     let handler_id = unsafe {
                         $ffi_connect_stream_fn(&self.ptr, sender_raw_ptr)
                     }.map_err(|e| NuitrackError::OperationFailed(
                         format!("FFI connect call {} failed: {}", stringify!($ffi_connect_stream_fn), e)
                     ))?;
-                    self.$handler_id_field = Some(handler_id);
-                    Ok($stream_struct_name { rx })
+
+                    *state_guard = Some(StreamActiveState {
+                        handler_id,
+                        raw_sender_ptr: sender_raw_ptr,
+                        _phantom: std::marker::PhantomData,
+                    });
+                    //self.$handler_id_field = Some(handler_id);
+                    Ok($stream_struct_name {
+                        rx,
+                        active_state: self.$handler_id_field.clone(),
+                        tracker_ptr: self.ptr.clone(),
+                    })
                 }
             )*
         }
@@ -265,18 +302,12 @@ macro_rules! generate_async_tracker {
             fn drop(&mut self) {
                 debug!(tracker = stringify!($tracker_name), "Dropping tracker and disconnecting streams.");
                 $(
-                    if let Some(handler_id) = self.$handler_id_field.take() {
-                        if let Err(e) = $ffi_disconnect_stream_fn(&self.ptr, handler_id) {
-                            error!(
-                                tracker = stringify!([< Async $base_module_name_snake:camel >]),
-                                ffi_fn = stringify!($ffi_disconnect_stream_fn),
-                                error = %e,
-                                "Error in FFI disconnect during Drop"
-                            );
+                    let mut state = self.$handler_id_field.lock().unwrap();
+                    if let Some(active_state) = state.take() {
+                        if let Err(e) = $ffi_disconnect_stream_fn(&self.ptr, active_state.handler_id) {
+                            error!(error = %e, "FFI disconnect error during Tracker Drop");
                         }
-                    }
-                    if let Some(raw_ptr) = self.$raw_sender_field.take() {
-                        unsafe { let _ = Box::from_raw(raw_ptr as *mut $sender_type_alias); };
+                        unsafe { let _ = Box::from_raw(active_state.raw_sender_ptr as *mut $sender_type_alias); };
                     }
                 )*
             }
@@ -292,6 +323,7 @@ macro_rules! generate_async_tracker {
         #[instrument(name="ffi_callback", skip_all, fields(dispatcher.name = stringify!($dispatcher_name)))]
         #[unsafe(no_mangle)]
         pub extern "C" fn $dispatcher_name($ffi_arg_name: &$ffi_arg_type, raw_sender_ptr: *mut $c_void_type,) {
+            tracing::trace!("FFI callback dispatcher invoked.");
             if raw_sender_ptr.is_null() { 
                 error!(dispatcher = stringify!($dispatcher_name), "raw_sender_ptr argument is null.");
                 return; 
@@ -313,6 +345,7 @@ macro_rules! generate_async_tracker {
         #[instrument(name="ffi_callback", skip_all, fields(dispatcher.name = stringify!($dispatcher_name), item_id = ?$ffi_item_arg_name))]
         #[unsafe(no_mangle)]
         pub extern "C" fn $dispatcher_name($ffi_item_arg_name: $ffi_item_arg_type, raw_sender_ptr: *mut $c_void_type,) {
+            tracing::trace!("FFI callback dispatcher invoked.");
             if raw_sender_ptr.is_null() { 
                 error!(dispatcher = stringify!($dispatcher_name), "raw_sender_ptr argument is null."); 
                 return; 

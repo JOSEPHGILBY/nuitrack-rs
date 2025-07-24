@@ -18,6 +18,7 @@ pub mod ffi {
 pub mod ffi {
 
     #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     pub struct Vector3 {
         pub x: f32,
         pub y: f32,

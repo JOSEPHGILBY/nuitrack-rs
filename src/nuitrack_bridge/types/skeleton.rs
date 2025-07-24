@@ -166,11 +166,13 @@ pub mod ffi {
     }
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     pub struct Orientation {
         pub matrix: [f32; 9],
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)] 
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")] 
     pub struct Joint {
         pub joint_type: JointType,
         pub confidence: f32,

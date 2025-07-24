@@ -3,6 +3,8 @@ use crate::nuitrack_bridge::types::skeleton::ffi::{self as skeleton_ffi, Joint};
 
 pub use crate::nuitrack_bridge::types::skeleton::ffi::JointType;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[derive(Debug, Clone)]
 pub struct Skeleton {
     pub user_id: i32,

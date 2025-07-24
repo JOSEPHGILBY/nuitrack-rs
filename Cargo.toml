@@ -35,6 +35,7 @@ members = [
     "examples/tokio-runtime-feature/tui",
     "validation_apps/test-concurrent-init",
     "validation_apps/test-serde-feature-builds",
+    "validation_apps/test-stream-cleanup",
 ]
 default-members = ["."]
 
@@ -47,6 +48,7 @@ thiserror = "2.0"
 futures-core = "0.3"
 futures-channel = "0.3"
 pin-project-lite = "0.2"
+pin-project = "1.1"
 tracing = "0.1"
 blocking = "1"
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
