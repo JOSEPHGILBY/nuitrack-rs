@@ -1,22 +1,35 @@
 #[macro_export]
 macro_rules! setup_nuitrack_streams {
-    ( $( $module_token:ident ),+ $(,)? ) => { // Match one or more tokens, with optional trailing comma
+    ( $( $module_token:ident ),+ $( ; $( $key:expr => $value:expr ),* )? $(,)? ) => { // Match one or more tokens, with optional trailing comma
         async {
             use $crate::nuitrack::{
                 async_api::{session_builder::NuitrackSessionBuilder,
                 session::NuitrackSession}, // For the return type hint
-                shared_types::session_config::ModuleType, // Assuming this is the correct path
+                shared_types::session_config::{ModuleType, DeviceConfig, DeviceSelector}, // Assuming this is the correct path
                 shared_types::error::{NuitrackError, Result as NuitrackResult},
             };
+
+            let mut builder = NuitrackSessionBuilder::new();
+
+            $(
+                $(
+                    builder = builder.with_config_value($key, $value);
+                )*
+            )?
 
             let modules_to_create = vec![
                 $( ModuleType::$module_token ),*
             ];
 
-            let mut session: NuitrackSession = NuitrackSessionBuilder::create_session_from_single_default_device(
-                modules_to_create
-            )
-            .await?; // Use `?` directly as it returns NuitrackResult
+            let device_config = DeviceConfig {
+                selector: DeviceSelector::ByIndex(0),
+                modules_to_create,
+            };
+
+            let mut session: NuitrackSession = builder
+                .with_device_config(device_config)
+                .init_session()
+                .await?; // Use `?` directly as it returns NuitrackResult
 
             // 3. Helper macro to extract a specific stream
             macro_rules! get_stream_for_module {

@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
 
 use tracing::{debug, error, info, trace, info_span, instrument, trace_span, warn, Instrument};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{collections::HashMap, sync::atomic::{AtomicBool, Ordering}};
 use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
 use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker, color_sensor::AsyncColorSensor, depth_sensor::AsyncDepthSensor};
@@ -46,7 +46,10 @@ pub(crate) struct NuitrackRuntimeGuard(());
 impl NuitrackRuntimeGuard {
 
     #[instrument]
-    pub(crate) async fn acquire(config_path_str: &str) -> NuitrackResult<Self> {
+    pub(crate) async fn acquire(
+        config_path_str: &str,
+        config_values: &HashMap<String, String>,
+    ) -> NuitrackResult<Self> {
         if IS_NUITRACK_RUNTIME_INITIALIZED
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
@@ -56,13 +59,22 @@ impl NuitrackRuntimeGuard {
         }
 
         let config_path_owned = config_path_str.to_string();
+        let config_values_owned = config_values.clone();
         if let Err(e) = trace_span!("ffi", function = "Nuitrack::init").in_scope(|| {
             run_blocking(move || {
                 let _global_lock_guard_inner = NUITRACK_GLOBAL_API_LOCK.lock().map_err(|_| {
                     NuitrackError::OperationFailed("NUITRACK_GLOBAL_API_LOCK poisoned during init attempt".into())
                 })?;
+                
                 core_ffi::init(&config_path_owned)
-                    .map_err(|cxx_e| NuitrackError::InitFailed(format!("FFI init_nuitrack: {}", cxx_e))) // Corrected
+                    .map_err(|cxx_e| NuitrackError::InitFailed(format!("FFI init_nuitrack: {}", cxx_e)))?; // Corrected
+
+                for (key, value) in &config_values_owned {
+                    core_ffi::set_config_value(key, value)
+                        .map_err(|e| NuitrackError::InitFailed(format!("FFI set_config_value for key '{}': {}", key, e)))?;
+                }
+
+                Ok(())
             })
         }).await {
             IS_NUITRACK_RUNTIME_INITIALIZED.store(false, Ordering::SeqCst);

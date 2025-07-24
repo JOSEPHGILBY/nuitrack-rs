@@ -1308,7 +1308,6 @@ dependencies = [
  "futures-core",
  "paste",
  "pin-project",
- "pin-project-lite",
  "serde",
  "thiserror 2.0.12",
  "tokio",

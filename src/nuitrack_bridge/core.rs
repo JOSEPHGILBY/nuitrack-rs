@@ -30,5 +30,11 @@ pub mod ffi {
         fn wait_update_depth_sensor(module: &SharedPtr<DepthSensor>) -> Result<()>;
 
         pub fn release() -> Result<()>;
+
+        #[cxx_name = "setConfigValue"]
+        pub fn set_config_value(key: &str, value: &str) -> Result<()>;
+
+        #[cxx_name = "getConfigValue"]
+        pub fn get_config_value(key: &str) -> Result<String>;
     }
 }

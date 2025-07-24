@@ -1,4 +1,5 @@
 use tracing::{info, info_span, instrument, trace_span, warn};
+use std::collections::HashMap;
 use std::path::Path;
 use cxx::SharedPtr;
 
@@ -27,6 +28,7 @@ pub struct NuitrackSessionBuilder {
     global_config_path: Option<String>,
     device_configurations: Vec<DeviceConfig>,
     run_internal_update_loop: bool,
+    config_values: HashMap<String, String>,
     // Add policy flags here if desired
     // policy_strict_device_match: bool, // e.g., error if a configured device selector finds no match
 }
@@ -59,6 +61,11 @@ impl NuitrackSessionBuilder {
         self
     }
 
+    pub fn with_config_value(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.config_values.insert(key.into(), value.into());
+        self
+    }
+
     pub fn with_device_config(mut self, config: DeviceConfig) -> Self {
         self.device_configurations.push(config);
         self
@@ -73,7 +80,10 @@ impl NuitrackSessionBuilder {
     /// This path is used when the user provides all configurations upfront.
     #[instrument(skip(self), name = "init_session")]
     pub async fn init_session(self) -> NuitrackResult<NuitrackSession> {
-        let guard = NuitrackRuntimeGuard::acquire(&self.global_config_path.unwrap_or_default()).await?;
+        let guard = NuitrackRuntimeGuard::acquire(
+            &self.global_config_path.unwrap_or_default(),
+            &self.config_values,
+        ).await?;
         
         let available_devices_cache = Self::fetch_available_devices_info_internal().await.map_err(|e| {
             // Guard will drop and release if this errors
@@ -118,7 +128,10 @@ impl NuitrackSessionBuilder {
     pub async fn discover_devices_first(self) -> NuitrackResult<DeviceDiscoveryState> {
         let config_path_for_acquire = self.global_config_path.as_deref().unwrap_or_default();
         info!("Acquiring runtime guard and discovering devices...");
-        let guard = NuitrackRuntimeGuard::acquire(config_path_for_acquire).await?;
+        let guard = NuitrackRuntimeGuard::acquire(
+            config_path_for_acquire,
+            &self.config_values
+        ).await?;
         let available_devices = Self::fetch_available_devices_info_internal().await.map_err(|e| {
             // Guard will drop and release if this errors.
             e

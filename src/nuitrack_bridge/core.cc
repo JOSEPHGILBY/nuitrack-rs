@@ -113,4 +113,20 @@ namespace nuitrack_bridge::core {
             throw std::runtime_error("Unknown exception during Nuitrack release");
         }
     }
+
+    void setConfigValue(rust::Str key, rust::Str value) {
+        try {
+            Nuitrack::setConfigValue(std::string(key), std::string(value));
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack setConfigValue failed: ") + e.what());
+        }
+    }
+
+    rust::String getConfigValue(rust::Str key) {
+        try {
+            return Nuitrack::getConfigValue(std::string(key));
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack getConfigValue failed: ") + e.what());
+        }
+    }
 }

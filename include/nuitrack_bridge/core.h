@@ -25,4 +25,7 @@ namespace nuitrack_bridge::core {
     void waitUpdateSkeletonTracker(const std::shared_ptr<SkeletonTracker>& skeletonTracker);
     void waitUpdateDepthSensor(const std::shared_ptr<DepthSensor>& depthSensor);
     void release();
+
+    void setConfigValue(rust::Str key, rust::Str value);
+    rust::String getConfigValue(rust::Str key);
 }

@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
 
     // 3. Initialize Nuitrack
     let (mut hand_stream, mut skeleton_stream, mut color_stream, mut depth_stream, session) =
-        setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor, DepthSensor).await?;
+        setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor, DepthSensor; "DepthProvider.Depth2ColorRegistration" => "true").await?;
     session.start_processing().await?;
     info!("Nuitrack session started.");
 
