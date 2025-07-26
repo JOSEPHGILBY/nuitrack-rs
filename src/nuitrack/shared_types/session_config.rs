@@ -25,6 +25,7 @@ pub enum ModuleType {
     UserTracker,
     SkeletonTracker,
     HandTracker,
+    GestureRecognizer,
     // Example: Add another for testing your "second tracker type" idea
     // OtherTracker, // You'd need an AsyncOtherTracker and its FFI
 }

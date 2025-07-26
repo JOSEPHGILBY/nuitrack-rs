@@ -36,6 +36,7 @@ members = [
     "validation_apps/test-concurrent-init",
     "validation_apps/test-serde-feature-builds",
     "validation_apps/test-stream-cleanup",
+    "validation_apps/test-stream-merge",
 ]
 default-members = ["."]
 

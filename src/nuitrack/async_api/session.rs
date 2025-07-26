@@ -11,10 +11,10 @@ use cxx::SharedPtr; // Used by WaitableModuleFfiVariant
 
 use super::{async_dispatch::run_blocking, hand_tracker::AsyncHandTracker, skeleton_tracker::AsyncSkeletonTracker, color_sensor::AsyncColorSensor, depth_sensor::AsyncDepthSensor};
 
-use crate::nuitrack::shared_types::{
+use crate::nuitrack::{async_api::{gesture_recognizer::AsyncGestureRecognizer, user_tracker::AsyncUserTracker}, shared_types::{
     error::{NuitrackError, Result as NuitrackResult}, 
     session_config::DiscoveredDeviceInfo
-};
+}};
 use crate::nuitrack_bridge::core::ffi as core_ffi;
 
 // --- FFI Type Aliases for WaitableModuleFfiVariant ---
@@ -23,6 +23,8 @@ type FFIColorSensor = crate::nuitrack_bridge::modules::color_sensor::ffi::ColorS
 type FFIHandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker;
 type FFISkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker; // Ensure this bridge exists
 type FFIDepthSensor = crate::nuitrack_bridge::modules::depth_sensor::ffi::DepthSensor;
+type FFIUserTracker = crate::nuitrack_bridge::modules::user_tracker::ffi::UserTracker;
+type FFIGestureRecognizer = crate::nuitrack_bridge::modules::gesture_recognizer::ffi::GestureRecognizer;
 
 // --- Make these crate-visible ---
 pub(crate) static IS_NUITRACK_RUNTIME_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -33,10 +35,11 @@ pub struct ActiveDeviceContext {
     pub info: DiscoveredDeviceInfo, // Resolved info of the active device
     //pub depth_sensor: Option<crate::nuitrack::depth::AsyncDepthSensor>, // Placeholder
     pub color_sensor: Option<AsyncColorSensor>, // Placeholder
-    //pub user_tracker: Option<crate::nuitrack::user::AsyncUserTracker>, // Placeholder
     pub skeleton_tracker: Option<AsyncSkeletonTracker>, // Placeholder
     pub hand_tracker: Option<AsyncHandTracker>,
     pub depth_sensor: Option<AsyncDepthSensor>,
+    pub user_tracker: Option<AsyncUserTracker>,
+    pub gesture_recognizer: Option<AsyncGestureRecognizer>,
     // pub other_tracker: Option<AsyncOtherTracker>, // Example for your second tracker
 }
 
@@ -128,7 +131,9 @@ pub(crate) enum WaitableModuleFFIVariant {
     ColorSensor(SharedPtr<FFIColorSensor>),
     Hand(SharedPtr<FFIHandTracker>),
     Skeleton(SharedPtr<FFISkeletonTracker>),
-    DepthSensor(SharedPtr<FFIDepthSensor>)
+    DepthSensor(SharedPtr<FFIDepthSensor>),
+    UserTracker(SharedPtr<FFIUserTracker>),
+    GestureRecognizer(SharedPtr<FFIGestureRecognizer>),
     // Add other waitable module FFI types here
 }
 
@@ -263,6 +268,25 @@ impl NuitrackSession {
                                                             })
                                                         }).await
                                                     }
+                                                    WaitableModuleFFIVariant::UserTracker(ptr) => { // ADD THIS BLOCK
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_user_tracker").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                // Ensure you have this FFI function bridged:
+                                                                core_ffi::wait_update_user_tracker(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_user_tracker: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
+                                                    WaitableModuleFFIVariant::GestureRecognizer(ptr) => {
+                                                        let ptr_clone = ptr.clone();
+                                                        trace_span!("ffi", function="wait_update_gesture_recognizer").in_scope(|| {
+                                                            run_blocking(move || {
+                                                                core_ffi::wait_update_gesture_recognizer(&ptr_clone)
+                                                                    .map_err(|e_inner| NuitrackError::OperationFailed(format!("FFI wait_update_gesture_recognizer: {}", e_inner)))
+                                                            })
+                                                        }).await
+                                                    }
                                                 };
                                                 if let Err(e) = wait_result {
                                                     error!(error = %e, "Error in module waitUpdate");
@@ -355,8 +379,21 @@ impl NuitrackSession {
                     .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_depth_sensor: {}", e))))
                 }).await?;
                 waited = true;
+            } else if let Some(ut_wrapper) = &device_ctx.user_tracker { // ADD THIS BLOCK
+                let ptr_clone = ut_wrapper.get_ffi_ptr_clone();
+                trace_span!("ffi", function="wait_update_user_tracker").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_user_tracker(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_user_tracker: {}", e))))
+                }).await?;
+                waited = true;
+            } else if let Some(gr_wrapper) = &device_ctx.gesture_recognizer {
+                let ptr_clone = gr_wrapper.get_ffi_ptr_clone();
+                trace_span!("ffi", function="wait_update_gesture_recognizer").in_scope(|| {
+                    run_blocking(move || core_ffi::wait_update_gesture_recognizer(&ptr_clone)
+                    .map_err(|e| NuitrackError::OperationFailed(format!("FFI wait_update_gesture_recognizer: {}", e))))
+                }).await?;
+                waited = true;
             }
-
             if !waited {
                 debug!("Device has no representative module for a specific waitUpdate call.");
             }

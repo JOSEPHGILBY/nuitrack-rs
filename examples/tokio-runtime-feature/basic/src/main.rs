@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
         .with_target(true)           // Show the module path for context
         .init();
     info!("Attempting to initialize Nuitrack with Tokio runtime...");
-    let (mut hand_stream, mut skeleton_stream, mut color_stream, session) = setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor).await?;
+    let (mut hand_stream, mut skeleton_stream, mut color_stream, mut completed_gestures_stream, session) = setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor, GestureRecognizer).await?;
 
     // 4. Start Nuitrack processing (this also starts the internal update loop if enabled)
     session.start_processing().await.map_err(|e: NuitrackError| {
@@ -147,6 +147,35 @@ async fn main() -> anyhow::Result<()> {
 
                 if should_break_loop {
                     break;
+                }
+            }
+            Some(completed_gestures_frame_result) = completed_gestures_stream.next() => {
+                match completed_gestures_frame_result {
+                    Ok(frame) => {
+                        println!(
+                            "Completed Gestures Frame {}: Timestamp: {}",
+                            i,
+                            frame.timestamp().unwrap_or(0),
+                        );
+                        match frame.gestures() {
+                            Ok(gestures) => {
+                                println!("  Completed gestures Found: {}", gestures.len());
+                                for gesture in gestures {
+                                    println!(
+                                        "  Gesture: {:?}, User ID: {}",
+                                        gesture.gesture_type,
+                                        gesture.user_id,
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                error!(error = ?e, "Error processing completed gestures in frame");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(error = ?e, "Error receiving completed gestures frame data");
+                    }
                 }
             }
             // Consider a global timeout or cancellation mechanism if needed for the main example loop.

@@ -99,6 +99,34 @@ namespace nuitrack_bridge::core {
         }
     }
 
+    void waitUpdateUserTracker(const std::shared_ptr<UserTracker>& userTracker) {
+        try {
+            Nuitrack::waitUpdate(userTracker);
+        } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { 
+            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(UserTracker): ") + e.what());
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack waitUpdate(UserTracker) failed: ") + e.what());
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Exception during Nuitrack waitUpdate(UserTracker): ") + e.what());
+        } catch (...) {
+            throw std::runtime_error("Unknown exception during Nuitrack waitUpdate(UserTracker)");
+        }
+    }
+
+    void waitUpdateGestureRecognizer(const std::shared_ptr<GestureRecognizer>& gestureRecognizer) {
+        try {
+            Nuitrack::waitUpdate(gestureRecognizer);
+        } catch (const tdv::nuitrack::LicenseNotAcquiredException& e) { 
+            throw std::runtime_error(std::string("LicenseNotAcquiredException during waitUpdate(GestureRecognizer): ") + e.what());
+        } catch (const tdv::nuitrack::Exception& e) {
+            throw std::runtime_error(std::string("Nuitrack waitUpdate(GestureRecognizer) failed: ") + e.what());
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Exception during Nuitrack waitUpdate(GestureRecognizer): ") + e.what());
+        } catch (...) {
+            throw std::runtime_error("Unknown exception during Nuitrack waitUpdate(GestureRecognizer)");
+        }
+    }
+
     // New implementation for release wrapper
     void release() {
         try {

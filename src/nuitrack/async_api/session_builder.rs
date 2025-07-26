@@ -5,6 +5,8 @@ use cxx::SharedPtr;
 
 use crate::nuitrack::async_api::color_sensor::AsyncColorSensor;
 use crate::nuitrack::async_api::depth_sensor::AsyncDepthSensor;
+use crate::nuitrack::async_api::gesture_recognizer::AsyncGestureRecognizer;
+use crate::nuitrack::async_api::user_tracker::AsyncUserTracker;
 use crate::nuitrack_bridge::device::ffi as device_ffi;
 use super::async_dispatch::run_blocking;
 use super::skeleton_tracker::AsyncSkeletonTracker;
@@ -216,6 +218,8 @@ impl NuitrackSessionBuilder {
                 hand_tracker: None, 
                 skeleton_tracker: None,
                 depth_sensor: None,
+                user_tracker: None,
+                gesture_recognizer: None,
             };
             
             let mut representative_module_for_device: Option<WaitableModuleFFIVariant> = None;
@@ -250,6 +254,20 @@ impl NuitrackSessionBuilder {
                             representative_module_for_device = Some(WaitableModuleFFIVariant::DepthSensor(ds.get_ffi_ptr_clone()));
                         }
                         ad_context.depth_sensor = Some(ds);
+                    }
+                    ModuleType::UserTracker => { // ADD THIS BLOCK
+                        let ut = AsyncUserTracker::new_async().await?;
+                        if representative_module_for_device.is_none() {
+                            representative_module_for_device = Some(WaitableModuleFFIVariant::UserTracker(ut.get_ffi_ptr_clone()));
+                        }
+                        ad_context.user_tracker = Some(ut);
+                    }
+                    ModuleType::GestureRecognizer => {
+                        let gr = AsyncGestureRecognizer::new_async().await?;
+                        if representative_module_for_device.is_none() {
+                            representative_module_for_device = Some(WaitableModuleFFIVariant::GestureRecognizer(gr.get_ffi_ptr_clone()));
+                        }
+                        ad_context.gesture_recognizer = Some(gr);
                     }
                     _ => {}
                     // ... other module types like DepthSensor, ColorSensor, UserTracker ...

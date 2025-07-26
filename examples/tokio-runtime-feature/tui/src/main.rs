@@ -7,7 +7,7 @@ use crossterm::{
 use futures_util::StreamExt;
 use nuitrack_rs::{
     nuitrack::shared_types::{
-        hand_frame::HandFrame, rgb_frame::Color3, skeleton_frame::SkeletonFrame,
+        hand_frame::HandFrame, rgb_frame::Color3, skeleton_frame::SkeletonFrame, user_frame::UserFrame,
     },
     setup_nuitrack_streams,
 };
@@ -17,18 +17,30 @@ use ratatui::{
 };
 use tokio::{sync::{mpsc, watch}};
 use image::{DynamicImage, ImageBuffer, Rgb};
-use std::{io::stdout, sync::{Arc, Mutex}, time::Duration};
+use std::{io::stdout, sync::{Arc, Mutex}, time::{Duration, Instant}};
 use tracing::{debug, info, warn, Level};
 use fast_image_resize as fr;
 
 pub const GRADIENT: &str = r#" ░▒▓█"#;
 
+enum RenderableFrame {
+    Rgb(DynamicImage),
+    User(UserFrame),
+}
+
+#[derive(Clone)]
+enum ViewMode {
+    Rgb,
+    UserMap,
+}
 /// AppState holds all data needed for rendering.
 struct AppState {
     latest_skeleton: Option<SkeletonFrame>,
     latest_hands: Option<HandFrame>,
     ascii_art: (String, Vec<u8>),
     frame_dims: (u32, u32),
+    current_view: ViewMode,
+    last_view_switch: Instant,
 }
 
 impl AppState {
@@ -38,6 +50,8 @@ impl AppState {
             latest_hands: None,
             ascii_art: ("Waiting for camera feed...".to_string(), Vec::new()),
             frame_dims: (0,0),
+            current_view: ViewMode::Rgb,
+            last_view_switch: Instant::now(),
         }
     }
 }
@@ -60,64 +74,141 @@ async fn main() -> Result<()> {
 
 
     // 3. Initialize Nuitrack
-    let (mut hand_stream, mut skeleton_stream, mut color_stream, mut depth_stream, session) =
-        setup_nuitrack_streams!(HandTracker, SkeletonTracker, ColorSensor, DepthSensor; "DepthProvider.Depth2ColorRegistration" => "true").await?;
+    let (
+        mut hand_stream, 
+        mut skeleton_stream, 
+        mut color_stream, 
+        mut depth_stream, 
+        mut user_stream,
+        session) =
+        setup_nuitrack_streams!(
+            HandTracker, 
+            SkeletonTracker, 
+            ColorSensor, 
+            DepthSensor,
+            UserTracker; 
+            "DepthProvider.Depth2ColorRegistration" => "true").await?;
     session.start_processing().await?;
     info!("Nuitrack session started.");
 
     // 4. Setup App State and Processing Channels
     let app_state = Arc::new(Mutex::new(AppState::new()));
     let mut app_running = true;
-    let (image_tx, mut image_rx) = mpsc::channel::<(DynamicImage, Rect)>(2);
+    let (image_tx, mut image_rx) = mpsc::channel::<(RenderableFrame, Rect)>(2);
     let (ascii_tx, mut ascii_rx) = watch::channel(app_state.lock().unwrap().ascii_art.clone());
     let char_map: Vec<char> = GRADIENT.chars().collect();
 
     tokio::spawn(async move {
         while let Some((image, area)) = image_rx.recv().await {
             let start = tokio::time::Instant::now();
-            let src_image = fr::images::Image::from_vec_u8(
-                image.width(),
-                image.height(),
-                image.to_owned().into_rgb8().to_vec(),
-                fr::PixelType::U8x3
-            ).unwrap();
-            let mut dst_image = fr::images::Image::new(
-                area.width.into(), 
-                area.height.into(),
-                fr::PixelType::U8x3
-            );
+            let (ascii, rgb_info) = match image {
+                RenderableFrame::Rgb(image) => {
+                    let src_image = fr::images::Image::from_vec_u8(
+                        image.width(),
+                        image.height(),
+                        image.to_owned().into_rgb8().to_vec(),
+                        fr::PixelType::U8x3
+                    ).unwrap();
+                    let mut dst_image = fr::images::Image::new(
+                        area.width.into(), 
+                        area.height.into(),
+                        fr::PixelType::U8x3
+                    );
 
-            fr::Resizer::new()
-                .resize(
-                    &src_image, 
-                    &mut dst_image, 
-                    &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Nearest)
-                ).unwrap();
+                    fr::Resizer::new()
+                        .resize(
+                            &src_image, 
+                            &mut dst_image, 
+                            &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Nearest)
+                        ).unwrap();
 
-            let dst_image = dst_image.into_vec();
-            let img_buff = image::ImageBuffer::<image::Rgb<u8>, _>::from_vec(
-                area.width.into(),
-                area.height.into(),
-                dst_image
-            ).unwrap();
-            let processed_image = DynamicImage::ImageRgb8(img_buff);
-            let gray_image = processed_image.clone().into_luma8();
-            let rgb_info = processed_image.into_rgb8().to_vec();
+                    let dst_image = dst_image.into_vec();
+                    let img_buff = image::ImageBuffer::<image::Rgb<u8>, _>::from_vec(
+                        area.width.into(),
+                        area.height.into(),
+                        dst_image
+                    ).unwrap();
+                    let processed_image = DynamicImage::ImageRgb8(img_buff);
+                    let gray_image = processed_image.clone().into_luma8();
+                    let rgb_info = processed_image.into_rgb8().to_vec();
 
-            let (width, height) = (gray_image.width(), gray_image.height());
-            let capacity = (width + 1) * height + 1;
-            let mut ascii = String::with_capacity(capacity as usize);
+                    let (width, height) = (gray_image.width(), gray_image.height());
+                    let capacity = (width + 1) * height + 1;
+                    let mut ascii = String::with_capacity(capacity as usize);
 
-            let char_map_len = char_map.len();
-            for y in 0..height {
-                ascii.extend((0..width).map(|x| {
-                    let lum = gray_image.get_pixel(x, y)[0] as u32;
-                    let lookup_idx = char_map_len * lum as usize / (u8::MAX as usize + 1);
-                    char_map[lookup_idx]
-                }));
-            }
+                    let char_map_len = char_map.len();
+                    for y in 0..height {
+                        ascii.extend((0..width).map(|x| {
+                            let lum = gray_image.get_pixel(x, y)[0] as u32;
+                            let lookup_idx = char_map_len * lum as usize / (u8::MAX as usize + 1);
+                            char_map[lookup_idx]
+                        }));
+                    }
+                    (ascii, rgb_info)
+                }
+                RenderableFrame::User(user_frame) => {
+                    let (cols, rows) = (user_frame.cols().unwrap_or(0), user_frame.rows().unwrap_or(0));
+                    let user_data = user_frame.data().unwrap_or_default();
+                    if cols == 0 || rows == 0 || user_data.is_empty() {
+                        continue;
+                    }
 
+                    // Create a small palette for user colors
+                    let user_colors: [Color3; 6] = [
+                        Color3 { red: 255, green: 0, blue: 0 },   // Red
+                        Color3 { red: 0, green: 255, blue: 0 },   // Green
+                        Color3 { red: 0, green: 0, blue: 255 },   // Blue
+                        Color3 { red: 255, green: 255, blue: 0 }, // Yellow
+                        Color3 { red: 0, green: 255, blue: 255 }, // Cyan
+                        Color3 { red: 255, green: 0, blue: 255 }, // Magenta
+                    ];
 
+                    let user_data_bytes: &[u8] = unsafe {
+                        std::slice::from_raw_parts(
+                            user_data.as_ptr() as *const u8,
+                            user_data.len() * std::mem::size_of::<u16>(),
+                        )
+                    };
+
+                    let src_image = fr::images::ImageRef::new(
+                        cols as u32,
+                        rows as u32,
+                        user_data_bytes,
+                        fr::PixelType::U16,
+                    ).unwrap();
+                    
+                    let mut dst_image = fr::images::Image::new(area.width.into(), area.height.into(), fr::PixelType::U16);
+                    fr::Resizer::new().resize(&src_image, &mut dst_image, &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Nearest)).unwrap();
+                    
+                    let dst_data = dst_image.buffer();
+                    let (width, height) = (dst_image.width(), dst_image.height());
+
+                    let dst_data_u16: &[u16] = unsafe {
+                        std::slice::from_raw_parts(
+                            dst_data.as_ptr() as *const u16,
+                            dst_data.len() / std::mem::size_of::<u16>(),
+                        )
+                    };
+
+                    let mut ascii = String::with_capacity(((width + 1) * height) as usize);
+                    let mut rgb_info = Vec::with_capacity((width * height * 3) as usize);
+
+                    for user_id in dst_data_u16.iter() {
+                        let id = *user_id;
+                        if id == 0 { // Background
+                            ascii.push(' ');
+                            rgb_info.extend_from_slice(&[0, 0, 0]);
+                        } else { // A user
+                            ascii.push('█');
+
+                            let color = user_colors[(id as usize - 1) % user_colors.len()];
+                            rgb_info.extend_from_slice(&[color.red, color.green, color.blue]);
+                        }
+                    }
+                    (ascii, rgb_info)
+                }
+            };
+            
             debug!("Image processing task took {:?}", start.elapsed());
             if ascii_tx.send((ascii, rgb_info)).is_err() {
                 info!("Main loop ascii_rx channel closed.");
@@ -129,6 +220,7 @@ async fn main() -> Result<()> {
     let app_state_clone = app_state.clone();
     tokio::spawn(async move {
         loop {
+            let view_mode = (|| { app_state_clone.lock().unwrap().current_view.clone() })();
             tokio::select! {
                 // Eagerly pull skeleton data and update state
                 Some(Ok(skeletons)) = skeleton_stream.next() => {
@@ -140,6 +232,9 @@ async fn main() -> Result<()> {
                 }
                 // Eagerly pull color data
                 Some(Ok(rgb)) = color_stream.next() => {
+                    if matches!(view_mode, ViewMode::UserMap) {
+                        continue;
+                    }
                     let area = app_state_clone.lock().unwrap().frame_dims;
                     if area.0 > 0 && area.1 > 0 {
                         if let (Ok(cols), Ok(rows), Ok(data)) = (rgb.cols(), rgb.rows(), rgb.data()) {
@@ -155,7 +250,8 @@ async fn main() -> Result<()> {
                                 // Try to send to the processor. If the processor is busy,
                                 // this fails immediately and we drop the frame, ready to
                                 // process the next one. THIS is the eager dropping logic.
-                                match image_tx.try_send((dynamic_image, rec)) {
+                                let renderable = RenderableFrame::Rgb(dynamic_image);
+                                match image_tx.try_send((renderable, rec)) {
                                     Ok(_) => {}, // Sent successfully
                                     Err(mpsc::error::TrySendError::Full(_)) => {
                                         debug!("Image processor is busy; dropping raw Nuitrack frame.");
@@ -165,6 +261,26 @@ async fn main() -> Result<()> {
                                         break; // Exit if the receiver is gone
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+                Some(Ok(frame)) = user_stream.next() => {
+                    if matches!(view_mode, ViewMode::Rgb) {
+                        continue;
+                    }
+                    let area = app_state_clone.lock().unwrap().frame_dims;
+                    if area.0 > 0 && area.1 > 0 {
+                        let renderable = RenderableFrame::User(frame);
+                        let rec = Rect::new(0, 0, area.0 as u16, area.1 as u16);
+                        match image_tx.try_send((renderable, rec)) {
+                            Ok(_) => {}, // Sent successfully
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                debug!("Image processor is busy; dropping user frame.");
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                info!("Image processor channel closed.");
+                                break; // Exit if the receiver is gone
                             }
                         }
                     }
@@ -193,8 +309,22 @@ async fn main() -> Result<()> {
         // --- Input Handling ---
         if event::poll(Duration::from_millis(1))? {
             if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    app_running = false;
+                match key.code { // Use a match for clarity
+                    KeyCode::Char('q') => app_running = false,
+                    KeyCode::Char('v') => {
+                        let mut state = app_state.lock().unwrap();
+                        // Check if 200ms have passed since the last switch
+                        if state.last_view_switch.elapsed() > Duration::from_millis(200) {
+                            info!("Toggling view mode..."); // Move the log message here
+                            state.current_view = match state.current_view {
+                                ViewMode::Rgb => ViewMode::UserMap,
+                                ViewMode::UserMap => ViewMode::Rgb,
+                            };
+                            // Reset the timer
+                            state.last_view_switch = Instant::now();
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

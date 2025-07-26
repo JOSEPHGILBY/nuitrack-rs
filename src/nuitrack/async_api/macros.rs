@@ -73,6 +73,26 @@ macro_rules! setup_nuitrack_streams {
                             .map_err(|e_text| NuitrackError::OperationFailed(format!("Failed to get DepthSensor stream: {}", e_text)))
                     }
                 };
+                ($session_ref:expr, UserTracker) => {
+                    {
+                        let tracker = $session_ref.active_devices
+                            .get_mut(0)
+                            .and_then(|device_context| device_context.user_tracker.as_mut())
+                            .ok_or_else(|| NuitrackError::ModuleCreationFailed("AsyncUserTracker not found for the configured device.".to_string()))?;
+                        tracker.user_frames_stream()
+                            .map_err(|e_text| NuitrackError::OperationFailed(format!("Failed to get UserTracker stream: {}", e_text)))
+                    }
+                };
+                ($session_ref:expr, GestureRecognizer) => {
+                    {
+                        let tracker = $session_ref.active_devices
+                            .get_mut(0)
+                            .and_then(|device_context| device_context.gesture_recognizer.as_mut())
+                            .ok_or_else(|| NuitrackError::ModuleCreationFailed("AsyncGestureRecognizer not found for the configured device.".to_string()))?;
+                        tracker.completed_gestures_frames_stream()
+                            .map_err(|e_text| NuitrackError::OperationFailed(format!("Failed to get GestureRecognizer stream: {}", e_text)))
+                    }
+                };
                 // To satisfy type checking for the Result in the compile_error! case,
                 // we need a concrete error type. Since the macro is generic over stream types,
                 // this fallback error type doesn't perfectly align with the stream's Ok type.

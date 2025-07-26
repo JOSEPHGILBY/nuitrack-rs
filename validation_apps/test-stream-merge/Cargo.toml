@@ -1,0 +1,13 @@
+[package]
+name = "test-stream-merge"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[dependencies]
+nuitrack-rs = { path = "../..", features = ["tokio_runtime"] }
+anyhow = "1.0"
+tokio = { version = "1", features = ["full"] } # Use "full" for all async features
+futures-util = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }

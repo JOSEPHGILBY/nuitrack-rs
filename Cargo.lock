@@ -2016,6 +2016,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-stream-merge"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "nuitrack-rs",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"

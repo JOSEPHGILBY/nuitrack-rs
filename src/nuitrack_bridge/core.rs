@@ -8,6 +8,8 @@ pub mod ffi {
         type HandTracker = crate::nuitrack_bridge::modules::hand_tracker::ffi::HandTracker; // This refers to ::tdv::nuitrack::HandTracker
         type SkeletonTracker = crate::nuitrack_bridge::modules::skeleton_tracker::ffi::SkeletonTracker;
         type DepthSensor = crate::nuitrack_bridge::modules::depth_sensor::ffi::DepthSensor;
+        type UserTracker = crate::nuitrack_bridge::modules::user_tracker::ffi::UserTracker;
+        type GestureRecognizer = crate::nuitrack_bridge::modules::gesture_recognizer::ffi::GestureRecognizer;
     }
 
     unsafe extern "C++" {
@@ -28,6 +30,12 @@ pub mod ffi {
 
         #[cxx_name = "waitUpdateDepthSensor"]
         fn wait_update_depth_sensor(module: &SharedPtr<DepthSensor>) -> Result<()>;
+
+        #[cxx_name = "waitUpdateUserTracker"]
+        fn wait_update_user_tracker(module: &SharedPtr<UserTracker>) -> Result<()>;
+
+        #[cxx_name = "waitUpdateGestureRecognizer"]
+        fn wait_update_gesture_recognizer(module: &SharedPtr<GestureRecognizer>) -> Result<()>;
 
         pub fn release() -> Result<()>;
 
