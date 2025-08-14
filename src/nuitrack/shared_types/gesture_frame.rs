@@ -37,9 +37,11 @@ impl GestureFrame {
     pub fn gestures(&self) -> NuitrackResult<&[Gesture]> {
         let cached_result = self.gestures_cache.get_or_init(|| {
             debug!("Populating GestureFrame cache: converting FFI Gestures to Rust.");
-            Ok(trace_span!("ffi", function = "gesture_data_ffi::gesture_data_gestures")
-                .in_scope(|| gesture_data_ffi::gesture_data_gestures(&self.internal_ptr))?
-                .to_vec())
+            
+            let owned_vec = trace_span!("ffi", function = "gesture_data_ffi::gesture_data_gestures")
+                .in_scope(|| gesture_data_ffi::gesture_data_gestures(&self.internal_ptr))?;
+
+            Ok(owned_vec)
         });
 
         match cached_result {
@@ -97,9 +99,11 @@ impl UserStateFrame {
     pub fn user_states(&self) -> NuitrackResult<&[UserState]> {
         let cached_result = self.user_states_cache.get_or_init(|| {
             debug!("Populating UserStateFrame cache: converting FFI UserStates to Rust.");
-            Ok(trace_span!("ffi", function = "gesture_data_ffi::user_state_data_user_states")
-                .in_scope(|| gesture_data_ffi::user_state_data_user_states(&self.internal_ptr))?
-                .to_vec())
+            
+            let owned_vec = trace_span!("ffi", function = "gesture_data_ffi::user_state_data_user_states")
+                .in_scope(|| gesture_data_ffi::user_state_data_user_states(&self.internal_ptr))?;
+
+            Ok(owned_vec)
         });
 
         match cached_result {

@@ -38,7 +38,7 @@ pub mod ffi {
         #[cxx_name = "getGestureDataNumGestures"]
         pub fn gesture_data_num_gestures(data: &GestureData) -> Result<i32>;
         #[cxx_name = "getGestureDataGestures"]
-        pub fn gesture_data_gestures<'a>(data: &'a GestureData) -> Result<&'a [Gesture]>;
+        pub fn gesture_data_gestures(data: &GestureData) -> Result<Vec<Gesture>>;
 
         // --- UserStateData Accessors ---
         #[cxx_name = "getUserStateDataTimestamp"]
@@ -46,7 +46,7 @@ pub mod ffi {
         #[cxx_name = "getUserStateDataNumUserStates"]
         pub fn user_state_num_user_states(data: &UserStateData) -> Result<i32>;
         #[cxx_name = "getUserStateDataUserStates"]
-        pub fn user_state_data_user_states<'a>(data: &'a UserStateData) -> Result<&'a [UserState]>;
+        pub fn user_state_data_user_states(data: &UserStateData) -> Result<Vec<UserState>>;
 
         // --- UserGesturesStateData Accessors ---
         #[cxx_name = "getUserGesturesStateDataTimestamp"]

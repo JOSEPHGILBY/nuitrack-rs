@@ -18,26 +18,25 @@ namespace nuitrack_bridge::gesture_data {
         return static_cast<int32_t>(data.getNumGestures());
     }
 
-    rust::Slice<const Gesture> getGestureDataGestures(const GestureData& data) {
-        const auto& vec = data.getGestures();
-        std::cout << "--- Gesture FFI Debug ---" << std::endl;
-        std::cout << "C++ tdv::nuitrack::Gesture size: " << sizeof(tdv::nuitrack::Gesture) << std::endl;
-        std::cout << "Rust nuitrack_bridge::gesture::Gesture size: " << sizeof(Gesture) << std::endl;
-        std::cout << "Vector size (element count): " << vec.size() << std::endl;
+    // Change the return type from rust::Slice<...> to rust::Vec<Gesture>
+    rust::Vec<Gesture> getGestureDataGestures(const GestureData& data) {
+        // This returns a temporary std::vector, which is the source of the bug.
+        const auto cpp_temp_vec = data.getGestures();
 
-         if (!vec.empty()) {
-            const tdv::nuitrack::Gesture& first_gesture = vec[0];
-            std::cout << "Vector data address: " << static_cast<const void*>(vec.data()) << std::endl;
-            std::cout << "First gesture user ID: " << first_gesture.userId << std::endl;
-            std::cout << "First gesture type (as int): " << static_cast<int>(first_gesture.type) << std::endl;
-            std::cout << "sizeof int" << sizeof(int) << std::endl;
-            std::cout << "sizeof std::int32_t" << sizeof(::std::int32_t) << std::endl;
+        // Create a rust::Vec to build the final return value.
+        rust::Vec<Gesture> rust_vec;
+
+        // Manually copy the data from the temporary C++ vector
+        // into our safe, owned Rust vector.
+        for (const tdv::nuitrack::Gesture& cpp_gesture : cpp_temp_vec) {
+            Gesture rust_gesture;
+            rust_gesture.userId = cpp_gesture.userId;
+            rust_gesture.type = static_cast<nuitrack_bridge::gesture::GestureType>(cpp_gesture.type);
+            rust_vec.push_back(rust_gesture);
         }
-        std::cout << "-------------------------" << std::endl;
-        return rust::Slice<const Gesture>{
-            reinterpret_cast<const Gesture*>(vec.data()),
-            vec.size()
-        };
+
+        // Return the owned rust::Vec. CXX will safely move this to the Rust side.
+        return rust_vec;
     }
 
     // --- UserStateData Implementations ---
@@ -50,12 +49,17 @@ namespace nuitrack_bridge::gesture_data {
         return static_cast<int32_t>(data.getNumUserStates());
     }
 
-    rust::Slice<const UserState> getUserStateDataUserStates(const UserStateData& data) {
-        const auto& vec = data.getUserStates();
-        return rust::Slice<const UserState>{
-            reinterpret_cast<const UserState*>(vec.data()),
-            vec.size()
-        };
+    rust::Vec<UserState> getUserStateDataUserStates(const UserStateData& data) {
+        const auto cpp_temp_vec = data.getUserStates();
+        rust::Vec<UserState> rust_vec;
+
+        for (const tdv::nuitrack::UserState& cpp_state : cpp_temp_vec) {
+            UserState rust_state;
+            rust_state.userId = cpp_state.userId;
+            rust_state.state = static_cast<nuitrack_bridge::gesture::UserStateType>(cpp_state.state);
+            rust_vec.push_back(rust_state);
+        }
+        return rust_vec;
     }
 
     // --- UserGesturesStateData Implementations ---

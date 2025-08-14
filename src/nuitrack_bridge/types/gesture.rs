@@ -38,12 +38,16 @@ pub mod ffi {
         pub gesture_type: GestureType,
     }
 
+    impl Vec<Gesture> {}
+
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct UserState {
         #[cxx_name = "userId"]
         pub user_id: i32,
         pub state: UserStateType,
     }
+
+    impl Vec<UserState> {}
 
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct GestureState {

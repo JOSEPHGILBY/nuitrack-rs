@@ -21,12 +21,12 @@ namespace nuitrack_bridge::gesture_data {
     // --- GestureData Functions ---
     uint64_t getGestureDataTimestamp(const GestureData& data);
     int32_t getGestureDataNumGestures(const GestureData& data);
-    rust::Slice<const Gesture> getGestureDataGestures(const GestureData& data);
+    rust::Vec<Gesture> getGestureDataGestures(const GestureData& data);
 
     // --- UserStateData Functions ---
     uint64_t getUserStateDataTimestamp(const UserStateData& data);
     int32_t getUserStateDataNumUserStates(const UserStateData& data);
-    rust::Slice<const UserState> getUserStateDataUserStates(const UserStateData& data);
+    rust::Vec<UserState> getUserStateDataUserStates(const UserStateData& data);
 
     // --- UserGesturesStateData Functions ---
     uint64_t getUserGesturesStateDataTimestamp(const UserGesturesStateData& data);
