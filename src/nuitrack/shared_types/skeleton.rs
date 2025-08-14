@@ -1,7 +1,8 @@
 use tracing::instrument;
-use crate::nuitrack_bridge::types::skeleton::ffi::{self as skeleton_ffi, Joint};
+use crate::nuitrack_bridge::types::skeleton::ffi::{self as skeleton_ffi};
 
 pub use crate::nuitrack_bridge::types::skeleton::ffi::JointType;
+pub use crate::nuitrack_bridge::types::skeleton::ffi::Joint;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
