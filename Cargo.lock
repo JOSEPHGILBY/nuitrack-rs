@@ -1298,7 +1298,7 @@ dependencies = [
 
 [[package]]
 name = "nuitrack-rs"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "blocking",
