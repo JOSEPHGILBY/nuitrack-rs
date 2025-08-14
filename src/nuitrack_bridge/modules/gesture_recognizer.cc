@@ -3,6 +3,7 @@
 #include "nuitrack/types/GestureData.h"
 #include <stdexcept>
 #include <string>
+#include <iostream>
 
 namespace nuitrack_bridge::gesture_recognizer {
 
@@ -35,6 +36,7 @@ namespace nuitrack_bridge::gesture_recognizer {
         if (!recognizer) throw std::runtime_error("GestureRecognizer is null in connectOnCompletedGesturesFrameForAsync");
         try {
             return recognizer->connectOnNewGestures([newGesturesSender](GestureData::Ptr frame) {
+                std::cout << "Received GestureData object at address: " << frame.get() << std::endl;
                 rust_gesture_recognizer_completed_gestures_frame_dispatcher_async(frame, newGesturesSender);
             });
         } catch (const tdv::nuitrack::Exception& e) { throw std::runtime_error(format_nuitrack_error("connectOnNewGestures", e.what())); }
