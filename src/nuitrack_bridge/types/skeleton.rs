@@ -110,8 +110,7 @@ pub mod ffi {
 
 
     #[repr(i32)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum JointType {
         #[cxx_name = "JOINT_NONE"]
         None = 0,            // Reserved joint (unused).
@@ -199,5 +198,106 @@ pub mod ffi {
         #[cxx_name = "getJoints"]
         pub fn joints<'a>(skeleton: &'a Skeleton) -> &'a [Joint];
 
+    }
+}
+
+
+#[cfg(feature = "serde")]
+mod serde_impls {
+    use super::ffi;
+    use serde::{de::{self, Visitor}, Deserializer, Serializer};
+
+    // --- IMPLEMENTATION FOR SERIALIZE ---
+    impl serde::Serialize for ffi::JointType {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            // Match on the internal integer and serialize the correct string
+            match self.repr {
+                0 => serializer.serialize_str("none"),
+                1 => serializer.serialize_str("head"),
+                2 => serializer.serialize_str("neck"),
+                3 => serializer.serialize_str("torso"),
+                4 => serializer.serialize_str("waist"),
+                5 => serializer.serialize_str("leftCollar"),
+                6 => serializer.serialize_str("leftShoulder"),
+                7 => serializer.serialize_str("leftElbow"),
+                8 => serializer.serialize_str("leftWrist"),
+                9 => serializer.serialize_str("leftHand"),
+                10 => serializer.serialize_str("leftFingertip"),
+                11 => serializer.serialize_str("rightCollar"),
+                12 => serializer.serialize_str("rightShoulder"),
+                13 => serializer.serialize_str("rightElbow"),
+                14 => serializer.serialize_str("rightWrist"),
+                15 => serializer.serialize_str("rightHand"),
+                16 => serializer.serialize_str("rightFingertip"),
+                17 => serializer.serialize_str("leftHip"),
+                18 => serializer.serialize_str("leftKnee"),
+                19 => serializer.serialize_str("leftAnkle"),
+                20 => serializer.serialize_str("leftFoot"),
+                21 => serializer.serialize_str("rightHip"),
+                22 => serializer.serialize_str("rightKnee"),
+                23 => serializer.serialize_str("rightAnkle"),
+                24 => serializer.serialize_str("rightFoot"),
+                _ => serializer.serialize_str("unknown"),
+            }
+        }
+    }
+
+    // --- IMPLEMENTATION FOR DESERIALIZE ---
+    impl<'de> serde::Deserialize<'de> for ffi::JointType {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            struct JointTypeVisitor;
+
+            impl<'de> Visitor<'de> for JointTypeVisitor {
+                type Value = ffi::JointType;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    formatter.write_str("a joint type string like 'head' or 'rightShoulder'")
+                }
+
+                fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                where
+                    E: de::Error,
+                {
+                    // Match on the incoming string and return the correct struct
+                    let repr = match value {
+                        "none" => 0,
+                        "head" => 1,
+                        "neck" => 2,
+                        "torso" => 3,
+                        "waist" => 4,
+                        "leftCollar" => 5,
+                        "leftShoulder" => 6,
+                        "leftElbow" => 7,
+                        "leftWrist" => 8,
+                        "leftHand" => 9,
+                        "leftFingertip" => 10,
+                        "rightCollar" => 11,
+                        "rightShoulder" => 12,
+                        "rightElbow" => 13,
+                        "rightWrist" => 14,
+                        "rightHand" => 15,
+                        "rightFingertip" => 16,
+                        "leftHip" => 17,
+                        "leftKnee" => 18,
+                        "leftAnkle" => 19,
+                        "leftFoot" => 20,
+                        "rightHip" => 21,
+                        "rightKnee" => 22,
+                        "rightAnkle" => 23,
+                        "rightFoot" => 24,
+                        _ => return Err(E::unknown_variant(value, &["head", "neck", "..."])),
+                    };
+                    Ok(ffi::JointType { repr })
+                }
+            }
+
+            deserializer.deserialize_str(JointTypeVisitor)
+        }
     }
 }
