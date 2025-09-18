@@ -280,6 +280,32 @@ fn setup_sdk_repo_with_git_command(sdk_dest_path: &Path, desired_tag: &str) -> R
         .then_some(())
         .ok_or_else(|| anyhow::anyhow!("git checkout command failed"))?;
     println!("cargo:warning=Nuitrack SDK successfully cloned and checked out at commit {}.", &commit_id[0..std::cmp::min(7, commit_id.len())]);
+
+    let file_to_patch = sdk_dest_path
+        .join("Nuitrack")
+        .join("include")
+        .join("nuitrack")
+        .join("types")
+        .join("NuitrackDevice.h");
+
+    let original_content = fs::read_to_string(&file_to_patch)
+        .context(format!("Failed to read file to patch: {}", file_to_patch.display()))?;
+    
+    // Check if the patch is already applied
+    if original_content.contains("#include <cstring>") {
+        println!("cargo:warning=Patch for NuitrackDevice.h already applied. Skipping.");
+    } else {
+        println!("cargo:warning=Applying inline patch to NuitrackDevice.h...");
+        let new_content = original_content.replace(
+            "#include <vector>",
+            "#include <vector>\n#include <cstring>"
+        );
+
+        fs::write(&file_to_patch, new_content)
+            .context(format!("Failed to write patched content to: {}", file_to_patch.display()))?;
+        println!("cargo:warning=Successfully applied inline patch.");
+    }
+
     Ok(())
 }
 
